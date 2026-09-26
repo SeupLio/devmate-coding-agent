@@ -28,25 +28,35 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 🔧 **工具调用** | 7 个沙箱工具：`list_files` / `read_file` / `write_file` / `search_code` / `run_command` / `run_tests` / `git_operation` |
 | 📡 **流式交互** | 服务端 SSE 事件流，token 级增量渲染 + 工具调用时间线交织输出 |
 | 🗜️ **上下文管理** | token 预算控制，超限时自动压缩早期工具结果，压缩事件可观测 |
-| 🛡️ **沙箱安全** | 每会话独立目录，路径规范化防 `..` 逃逸，命令白名单，子进程超时强杀 |
+| 🛡️ **沙箱安全** | 每会话独立目录 + 独立 Git 仓库，路径规范化防 `..` 逃逸，命令白名单，子进程超时强杀 |
 | ✅ **效果评估** | 内置 4 任务评测集（修 bug / 加功能 / 重构 / 写文档），断言最终文件与测试结果，输出通过率报告 |
 | 🧪 **工程质量** | 15 个单元测试覆盖沙箱安全 / 工具执行 / 上下文压缩 |
 | 🔁 **限流韧性** | LLM 层指数退避重试（429/5xx），长评测链路不中断 |
 
 ## 实测结果
 
-> 2026-09-26 在本仓库代码上实际运行（非编造）
+> 2026-09-26 在 Windows 11 / Node 22 / bun 1.4.2 上实际运行（非编造），
+> 模型 `qwen3.8-max`（OpenAI 兼容接口）。
 
 ```
 单元测试：15/15 通过（bun test tests/agent.test.ts）
 
-评测集：4/4 任务通过（bun scripts/run-eval.ts）
-  ✓ 修复 mathutils 使全部测试通过      （断言：node --test exit 0 + 分母已修正）
-  ✓ 新增 clamp 函数并补测试           （断言：实现含 clamp + 测试含用例 + 全部通过）
-  ✓ fibonacci 重构为迭代实现           （断言：测试通过 + 不再递归 + 性能达标）
-  ✓ 为 README 补充 API 说明            （断言：含 API 章节 + 含函数签名）
+评测集：4/4 任务通过，通过率 100%，总用时 213s（bun scripts/run-eval.ts）
+  ✓ 修复 mathutils 使全部测试通过   6 步 / 7 次工具调用 / 31.5s
+  ✓ 新增 clamp 函数并补测试        10 步 / 11 次工具调用 / 73.5s
+  ✓ fibonacci 重构为迭代实现        7 步 / 7 次工具调用 / 47.4s
+  ✓ 为 README 补充使用说明          6 步 / 7 次工具调用 / 41.9s
 
 端到端：规划 → 流式输出 → 工具调用 → 测试验证 → Git 提交，全链路验证通过
+```
+
+评测过程中的真实产物示例（Agent 自主完成，非人工修改）：
+
+```
+[工具] read_file {"path":"mathutils.js"}      → 发现 average 分母 off-by-one
+[工具] write_file {"path":"mathutils.js",...} → 改 average / fibonacci / maxOf
+[工具] run_tests {}                           → exit 0：通过 4 项，失败 0 项
+[工具] git_operation {"action":"commit",...}  → [main 880d3c8] fix(mathutils): ...
 ```
 
 ## 架构

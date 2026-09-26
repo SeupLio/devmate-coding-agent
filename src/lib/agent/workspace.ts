@@ -6,6 +6,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 
 export const WORKSPACE_ROOT = path.join(process.cwd(), 'workspace')
 
@@ -20,11 +21,35 @@ export function sessionDir(sessionId: string) {
   return path.join(WORKSPACE_ROOT, sessionId)
 }
 
+/**
+ * 在沙箱内初始化一个独立的 Git 仓库。
+ *
+ * 为什么必须做：workspace/ 位于宿主项目目录内，若不 git init，
+ * 任何 git 命令都会沿目录向上找到**宿主的 .git**（而宿主 .gitignore
+ * 又忽略了 workspace/），于是 git status 永远"无改动"、commit 永远失败。
+ * 给每个沙箱建自己的 .git，Git 操作才真正作用于沙箱。
+ */
+function initGitRepo(dir: string) {
+  if (fs.existsSync(path.join(dir, '.git'))) return
+  const env = {
+    ...process.env,
+    GIT_AUTHOR_NAME: 'DevMate',
+    GIT_AUTHOR_EMAIL: 'devmate@local',
+    GIT_COMMITTER_NAME: 'DevMate',
+    GIT_COMMITTER_EMAIL: 'devmate@local',
+  }
+  const run = (args: string[]) => spawnSync('git', args, { cwd: dir, env, stdio: 'ignore' })
+  run(['init', '-q', '-b', 'main'])
+  run(['add', '-A'])
+  run(['commit', '-q', '-m', 'chore: init workspace'])
+}
+
 export function createWorkspace(sessionId: string) {
   ensureWorkspaceRoot()
   const dir = sessionDir(sessionId)
   fs.mkdirSync(dir, { recursive: true })
   copyDir(TEMPLATE_DIR, dir)
+  initGitRepo(dir)
   return dir
 }
 
