@@ -14,8 +14,10 @@ export function ensureWorkspaceRoot() {
   fs.mkdirSync(WORKSPACE_ROOT, { recursive: true })
 }
 
-/** 模板项目：src/ 下的内容会被复制到新会话沙箱 */
+/** 模板项目：内容会被复制到新会话沙箱 */
 const TEMPLATE_DIR = path.join(process.cwd(), 'assets', 'template-project')
+/** 备用模板：用于 held-out 评测（与主模板不同的问题域，避免过拟合） */
+export const HOLDOUT_TEMPLATE_DIR = path.join(process.cwd(), 'assets', 'holdout-project')
 
 export function sessionDir(sessionId: string) {
   return path.join(WORKSPACE_ROOT, sessionId)
@@ -44,11 +46,11 @@ function initGitRepo(dir: string) {
   run(['commit', '-q', '-m', 'chore: init workspace'])
 }
 
-export function createWorkspace(sessionId: string) {
+export function createWorkspace(sessionId: string, templateDir: string = TEMPLATE_DIR) {
   ensureWorkspaceRoot()
   const dir = sessionDir(sessionId)
   fs.mkdirSync(dir, { recursive: true })
-  copyDir(TEMPLATE_DIR, dir)
+  copyDir(templateDir, dir)
   initGitRepo(dir)
   return dir
 }

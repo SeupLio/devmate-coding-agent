@@ -1,0 +1,177 @@
+{
+  "startedAt": "2026-09-26T08:53:49.051Z",
+  "durationMs": 289077,
+  "model": "qwen3.8-max",
+  "taskScope": "holdout",
+  "repeat": 1,
+  "summaries": [
+    {
+      "config": {
+        "id": "full",
+        "label": "A · 完整配置",
+        "note": "7 个工具 + 任务规划 + 上下文压缩"
+      },
+      "total": 4,
+      "passed": 4,
+      "passRate": 100,
+      "avgSteps": 6.8,
+      "avgToolCalls": 7.3,
+      "avgDurationMs": 39351,
+      "avgTokens": 12288,
+      "results": [
+        {
+          "taskId": "ho-slugify",
+          "name": "[held-out] 修复 slugify 使其测试通过",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "slugify 分组测试通过",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 6,
+            "toolCalls": 6,
+            "tokensUsed": 7974,
+            "durationMs": 36050,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "ho-camelcase",
+          "name": "[held-out] 修复 camelCase 大小写处理",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "camelCase 分组测试通过",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 7,
+            "toolCalls": 7,
+            "tokensUsed": 13782,
+            "durationMs": 40073,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "ho-truncate",
+          "name": "[held-out] 实现 truncate 函数",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "truncate 分组测试通过",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 7,
+            "toolCalls": 8,
+            "tokensUsed": 12319,
+            "durationMs": 35870,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "ho-initials",
+          "name": "[held-out] 实现 initials 函数",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "initials 分组测试通过",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 7,
+            "toolCalls": 8,
+            "tokensUsed": 15077,
+            "durationMs": 45412,
+            "finished": true
+          }
+        }
+      ]
+    },
+    {
+      "config": {
+        "id": "bare",
+        "label": "F · 裸模型（无工具·单次输出）",
+        "note": "同模型一次性输出全部文件内容，无工具调用、无迭代、无自验证"
+      },
+      "total": 4,
+      "passed": 4,
+      "passRate": 100,
+      "avgSteps": 1,
+      "avgToolCalls": 0,
+      "avgDurationMs": 27833,
+      "avgTokens": 2277,
+      "results": [
+        {
+          "taskId": "ho-slugify",
+          "name": "[held-out] 修复 slugify 使其测试通过",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "slugify 分组测试通过",
+              "passed": true
+            }
+          ],
+          "written": [
+            "stringutils.js"
+          ],
+          "durationMs": 34268,
+          "tokensUsed": 2561
+        },
+        {
+          "taskId": "ho-camelcase",
+          "name": "[held-out] 修复 camelCase 大小写处理",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "camelCase 分组测试通过",
+              "passed": true
+            }
+          ],
+          "written": [
+            "stringutils.js"
+          ],
+          "durationMs": 25142,
+          "tokensUsed": 2092
+        },
+        {
+          "taskId": "ho-truncate",
+          "name": "[held-out] 实现 truncate 函数",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "truncate 分组测试通过",
+              "passed": true
+            }
+          ],
+          "written": [
+            "stringutils.js"
+          ],
+          "durationMs": 20115,
+          "tokensUsed": 2001
+        },
+        {
+          "taskId": "ho-initials",
+          "name": "[held-out] 实现 initials 函数",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "initials 分组测试通过",
+              "passed": true
+            }
+          ],
+          "written": [
+            "stringutils.js"
+          ],
+          "durationMs": 31805,
+          "tokensUsed": 2453
+        }
+      ]
+    }
+  ]
+}

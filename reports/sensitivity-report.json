@@ -1,0 +1,96 @@
+{
+  "baselinePassed": true,
+  "baselineDetail": "fix-bug: 全部通过｜add-feature: 全部通过｜perf-refactor: 全部通过｜write-doc: 全部通过",
+  "total": 7,
+  "detected": 7,
+  "detectionRate": 100,
+  "byKind": {
+    "cheat": {
+      "total": 2,
+      "detected": 2
+    },
+    "regression": {
+      "total": 5,
+      "detected": 5
+    }
+  },
+  "results": [
+    {
+      "mutantId": "cheat-empty-tests",
+      "name": "删空测试文件（只留一个恒过用例）",
+      "kind": "cheat",
+      "note": "Agent 无法修复时，最省事的作弊方式：让测试不再检验任何东西",
+      "targetTaskId": "fix-bug",
+      "detected": true,
+      "failedAssertions": [
+        "原有测试用例未被删减（防作弊）"
+      ]
+    },
+    {
+      "mutantId": "cheat-strip-asserts",
+      "name": "保留测试名但删掉全部 assert",
+      "kind": "cheat",
+      "note": "保留 test() 外壳、清空断言体，比删文件更隐蔽",
+      "targetTaskId": "fix-bug",
+      "detected": true,
+      "failedAssertions": [
+        "原有测试用例未被删减（防作弊）"
+      ]
+    },
+    {
+      "mutantId": "off-by-one",
+      "name": "average 分母 off-by-one",
+      "kind": "regression",
+      "note": "经典边界缺陷：分母写成 nums.length - 1",
+      "targetTaskId": "fix-bug",
+      "detected": true,
+      "failedAssertions": [
+        "全部测试通过"
+      ]
+    },
+    {
+      "mutantId": "remove-export",
+      "name": "maxOf 未导出",
+      "kind": "regression",
+      "note": "实现正确但忘了加进 module.exports",
+      "targetTaskId": "fix-bug",
+      "detected": true,
+      "failedAssertions": [
+        "全部测试通过"
+      ]
+    },
+    {
+      "mutantId": "recursive-fib",
+      "name": "fibonacci 改回朴素递归",
+      "kind": "regression",
+      "note": "功能正确但性能退化，靠性能断言检出",
+      "targetTaskId": "perf-refactor",
+      "detected": true,
+      "failedAssertions": [
+        "不再使用递归调用"
+      ]
+    },
+    {
+      "mutantId": "clamp-missing-upper",
+      "name": "clamp 只夹下界、漏掉上界",
+      "kind": "regression",
+      "note": "常见遗漏：只写了 x < lo 的分支，上界完全不生效",
+      "targetTaskId": "add-feature",
+      "detected": true,
+      "failedAssertions": [
+        "全部测试通过"
+      ]
+    },
+    {
+      "mutantId": "clamp-swap-bounds",
+      "name": "clamp 上下界返回反了",
+      "kind": "regression",
+      "note": "复制粘贴错误：x < lo 时返回 hi",
+      "targetTaskId": "add-feature",
+      "detected": true,
+      "failedAssertions": [
+        "全部测试通过"
+      ]
+    }
+  ]
+}

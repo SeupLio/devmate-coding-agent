@@ -3,10 +3,12 @@ import { runEvaluation } from '@/lib/eval/runner'
 
 export const maxDuration = 600
 
-/** SSE 评测进度接口：POST { taskIds? } */
+/** SSE 评测进度接口：POST { taskIds?, only?, repeat? } */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const taskIds = Array.isArray(body.taskIds) ? (body.taskIds as string[]).map(String) : undefined
+  const only = body.only === 'holdout' || body.only === 'default' ? body.only : undefined
+  const repeat = Number.isFinite(body.repeat) ? Number(body.repeat) : 1
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -15,7 +17,7 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
       }
       try {
-        for await (const ev of runEvaluation(taskIds)) {
+        for await (const ev of runEvaluation({ taskIds, only, repeat })) {
           send(ev)
         }
       } catch (e) {

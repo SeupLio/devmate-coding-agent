@@ -146,6 +146,12 @@ export const TOOLS: ToolDef[] = [
   },
 ]
 
+/** 按名称过滤工具集（对照实验用）。传 undefined = 返回全部工具；传 [] = 返回空 */
+export function filterTools(names?: string[]): ToolDef[] {
+  if (!names) return TOOLS
+  return TOOLS.filter((t) => names.includes(t.function.name))
+}
+
 /** 执行单个工具调用，返回字符串形式的结果（会进入对话上下文） */
 export async function executeTool(
   ctx: ToolContext,

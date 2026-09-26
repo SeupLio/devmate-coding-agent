@@ -29,8 +29,9 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 📡 **流式交互** | 服务端 SSE 事件流，token 级增量渲染 + 工具调用时间线交织输出 |
 | 🗜️ **上下文管理** | token 预算控制，超限时自动压缩早期工具结果，压缩事件可观测 |
 | 🛡️ **沙箱安全** | 每会话独立目录 + 独立 Git 仓库，路径规范化防 `..` 逃逸，命令白名单，子进程超时强杀 |
-| ✅ **效果评估** | 内置 4 任务评测集（修 bug / 加功能 / 重构 / 写文档），断言最终文件与测试结果，输出通过率报告 |
-| 🧪 **工程质量** | 15 个单元测试覆盖沙箱安全 / 工具执行 / 上下文压缩 |
+| ✅ **效果评估** | 四层评测：单元测试 + 4 常规任务 + **4 held-out 任务**（SWE-bench 式预置测试）+ **对照实验**，断言最终文件与测试退出码 |
+| 🔬 **评测自检** | 变异测试攻击评测器本身：7 个变异体检出率 100%；发现并修复「删测试即可通过」的作弊盲区 |
+| 🧪 **工程质量** | 34 个单元测试覆盖沙箱安全 / 工具执行 / 上下文压缩 / 防作弊 / 评测灵敏度 |
 | 🔁 **限流韧性** | LLM 层指数退避重试（429/5xx），长评测链路不中断 |
 
 ## 实测结果
@@ -39,13 +40,19 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 > 模型 `qwen3.8-max`（OpenAI 兼容接口）。
 
 ```
-单元测试：15/15 通过（bun test tests/agent.test.ts）
+L1 单元测试：34/34 通过（bun test tests/agent.test.ts）
 
-评测集：4/4 任务通过，通过率 100%，总用时 213s（bun scripts/run-eval.ts）
-  ✓ 修复 mathutils 使全部测试通过   6 步 / 7 次工具调用 / 31.5s
-  ✓ 新增 clamp 函数并补测试        10 步 / 11 次工具调用 / 73.5s
-  ✓ fibonacci 重构为迭代实现        7 步 / 7 次工具调用 / 47.4s
-  ✓ 为 README 补充使用说明          6 步 / 7 次工具调用 / 41.9s
+L2 常规评测集：4/4 通过，100%（bun scripts/run-eval.ts --only default）
+  ✓ 修复 mathutils 使全部测试通过
+  ✓ 新增 clamp 函数并补测试
+  ✓ fibonacci 重构为迭代实现
+  ✓ 为 README 补充使用说明
+
+L2 held-out 评测集：4/4 通过，100%（另一个项目 stringutils，断言全部来自预置测试）
+  ✓ 修复 slugify    ✓ 修复 camelCase    ✓ 实现 truncate    ✓ 实现 initials
+
+L4 评测灵敏度：基线全通过 + 变异体检出率 100%（7/7，bun scripts/check-sensitivity.ts）
+  作弊类 2/2（删空测试、清空 assert）｜逻辑退化类 5/5（off-by-one、漏导出、性能退化、边界遗漏、上下界写反）
 
 端到端：规划 → 流式输出 → 工具调用 → 测试验证 → Git 提交，全链路验证通过
 ```
@@ -58,6 +65,77 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 [工具] run_tests {}                           → exit 0：通过 4 项，失败 0 项
 [工具] git_operation {"action":"commit",...}  → [main 880d3c8] fix(mathutils): ...
 ```
+
+## 对照实验：这些数字说明了什么，以及没说明什么
+
+「通过率 100%」本身没有说服力 —— 它可能是系统强，也可能是题目太简单。
+为此做了一组**对照实验（ablation）**：固定任务集，只改变 Agent 的一个能力维度。
+
+### 强模型（qwen3.8-max）× 4 个常规任务
+
+| 实验组 | 通过率 | 平均步数 | 平均工具调用 | 平均耗时 | 平均 token |
+|---|---|---|---|---|---|
+| A · 完整配置 | 100% (4/4) | 7.8 | 8.5 | 50.4s | **11322** |
+| B · 无任务规划 | 100% (4/4) | 6.0 | 6.8 | 32.4s | 6545 |
+| C · 无自我验证（去掉 run_tests） | 100% (4/4) | 6.0 | 6.5 | 38.4s | 6831 |
+| D · 无代码检索（去掉 search_code） | 100% (4/4) | 7.0 | 7.5 | 46.6s | 8837 |
+| E · 无上下文压缩 | 100% (4/4) | 7.0 | 7.8 | 43.7s | 8570 |
+| F · 裸模型（无工具·单次输出） | 100% (4/4) | 1.0 | 0.0 | 32.0s | **2086** |
+
+**结论（诚实版）**：在这批任务上，**六个组全部 100% 通过** —— 规划、代码检索、上下文压缩
+甚至「完全不使用工具」都没有让通过率产生差异。唯一显著差异是**成本**：
+完整配置消耗的 token 是裸模型的 **5.4 倍**。
+
+也就是说：**当前任务集太简单，测不出 Agent 范式的价值**。
+单文件、单 bug、`node --test` 秒级完成的任务，强模型一次性输出就能做对。
+这不是评测的胜利，而是评测**区分度不足**的证据。
+
+### 弱模型（qwen3.5-flash）× 同一批任务 —— 差异出现了
+
+| 实验组 | 通过率 | 平均步数 | 平均工具调用 | 平均 token |
+|---|---|---|---|---|
+| A · 完整配置 | **75% (3/4)** | 6.5 | 5.8 | 6156 |
+| C · 无自我验证（去掉 run_tests） | **50% (2/4)** | 7.8 | 7.0 | **11698** |
+| F · 裸模型（无工具·单次输出） | **50% (2/4)** | 1.0 | 0.0 | 3771 |
+
+**结论**：模型能力不足时，「改完自己跑测试确认」这一步带来 **+25pp 通过率**（50% → 75%）。
+有意思的是 C 组反而更贵（11698 vs 6156 token）—— 因为不跑测试，Agent 只能反复试错。
+
+**这才是 Agent 范式价值的证据**：它不是在模型已经能做对时更省，而是在模型**不确定**时，
+通过环境反馈把错误纠回来。
+
+### held-out 泛化
+
+| 实验组 | 通过率（held-out 4 任务） |
+|---|---|
+| A · 完整配置 | 100% (4/4) |
+| F · 裸模型 | 100% (4/4) |
+
+换到另一个项目（stringutils）、断言全部来自预置测试，结论与常规集一致 ——
+**说明结论可迁移，不是特定任务集的偶然结果**。
+
+### 重复运行方差（稳定性）
+
+强模型 × 完整配置 × 4 任务 × **3 轮** = 12 次运行：
+
+```
+通过率：100%（12/12）｜平均步数 6.6｜平均工具调用 7.3｜平均耗时 44.6s｜平均 token 8943
+```
+
+三轮全部通过，**未观察到方差** —— 说明强模型在这批任务上表现稳定，
+单次通过率不是运气。但这也从另一面印证了「任务太简单」：稳定地简单。
+
+### 已知局限
+
+1. 任务规模小、单文件，区分度不足（上表已量化）；下一步需要**多文件、长链路、
+   必须依赖环境反馈**的任务才能真正拉开差距。
+2. 这不是 SWE-bench：真正的 SWE-bench 用真实 GitHub issue + 真实仓库 + Docker，
+   本项目只是**方法论复刻**（预置失败测试 + held-out + 对照），不能与 SWE-bench 分数类比。
+3. 样本量小（4 + 4 任务），单次通过率不代表稳定通过率，因此另做了重复运行观察方差。
+4. 无多框架对照（未对照 LangChain 等）。
+
+完整方法论见 **[docs/EVALUATION.md](docs/EVALUATION.md)**；原始报告见
+`ablation-*.txt` 与 `sensitivity-report.txt`。
 
 ## 架构
 
@@ -159,18 +237,36 @@ LLM_PROVIDER=zai
 命令行（不依赖界面）：
 
 ```bash
-bun test tests/agent.test.ts                          # 单元测试
+bun test tests/agent.test.ts                 # L1 单元测试（34 条）
 bun scripts/run-agent.ts "修复 mathutils.js 的 bug 并提交"   # 单任务
-bun scripts/run-eval.ts                               # 全量评测
+bun scripts/run-eval.ts --only default       # L2 常规评测集
+bun scripts/run-eval.ts --only holdout       # L2 held-out 评测集
+bun scripts/run-ablation.ts                  # L3 对照实验
+bun scripts/check-sensitivity.ts             # L4 评测灵敏度（不需要 LLM）
 ```
 
 ## 评测怎么做的？
 
-「Agent 说它做完了」不算数 —— 评测器只看**最终事实**：
+「Agent 说它做完了」不算数 —— 评测器只看**最终事实**。整套评测分四层，
+详细方法论见 **[docs/EVALUATION.md](docs/EVALUATION.md)**：
 
-1. 每个任务在**全新沙箱副本**上运行（杜绝状态泄漏）；
-2. 断言分两类：**测试执行断言**（`node --test` exit code）与**文件内容断言**（如「`mathutils.js` 含迭代实现」）；
-3. 工程细节：若 Agent 在总结阶段被限流打断，但任务产物已通过全部内容断言，**不误判为失败**。
+| 层 | 手段 | 回答什么问题 | 需要 LLM |
+|---|---|---|---|
+| L1 | **单元测试**（34 条） | 代码有没有坏？沙箱安全、工具、压缩逻辑对不对？ | 否 |
+| L2 | **任务评测集**（4 常规 + 4 held-out） | 端到端链路能不能跑通？能否泛化到新项目？ | 是 |
+| L3 | **对照实验**（5 组 + 裸模型） | 每个能力维度各自贡献多少？ | 是 |
+| L4 | **评测灵敏度**（7 变异体） | 评测本身是不是太松？ | **否** |
+
+几个关键设计：
+
+1. **沙箱隔离**：每个任务在**全新沙箱副本**上运行（含独立 Git 仓库），杜绝状态泄漏；
+2. **断言来源分层**：常规集用「测试退出码 + 文件内容」；**held-out 集 100% 用预置测试的退出码**
+   （SWE-bench 式 FAIL_TO_PASS），不含任何按实现写的正则，因此无法靠迁就断言刷分；
+3. **防作弊**：额外断言「原有测试用例未被删减」—— 否则 Agent 只要删测试就能让退出码变 0
+   （这个盲区是 L4 发现的，不是想出来的）；
+4. **灵敏度自检**：拿已知正确的参考解故意破坏成 7 个变异体，验证评测能否全部检出；
+   等价变异体（语义不变）必须剔除，否则会误判评测有洞；
+5. **容错**：若 Agent 在总结阶段被限流打断，但任务产物已通过全部断言，**不误判为失败**。
 
 初始沙箱是一个故意埋了 3 类 bug 的数学工具库：`average` 分母 off-by-one、`fibonacci` 低效递归 + 边界错误（性能断言强制要求迭代实现）、`maxOf` 未导出。换掉 `assets/template-project/` 即可评测你自己的项目。
 
@@ -186,17 +282,28 @@ src/
     api/workspace/[id]/...    # 文件树 / 文件内容
   lib/agent/                   # Agent 核心
     loop.ts                   # 执行循环（事件队列 + 并发泵）
-    tools.ts                  # 7 个沙箱工具
+    tools.ts                  # 7 个沙箱工具 + filterTools（对照实验用）
     context.ts                # 上下文预算与压缩
-    llm.ts                    # LLM 封装（重试 + SSE 解析）
+    llm.ts                    # LLM provider 路由
+    llm.openai.ts             # OpenAI 兼容实现（流式 + 重试）
+    llm.zai.ts                # 智谱内部 SDK 实现
     prompts.ts                # 系统提示词
-    workspace.ts              # 会话沙箱管理
-  lib/eval/                    # 评测集 + 执行器
+    workspace.ts              # 会话沙箱管理（独立 Git 仓库）
+  lib/eval/                    # 评测体系
+    tasks.ts                  # 常规 4 任务 + held-out 4 任务 + 防作弊断言
+    runner.ts                 # 评测执行器（支持运行配置与重复轮次）
+    ablation.ts               # 对照实验（5 组 + 裸模型执行器）
+    sensitivity.ts            # 评测灵敏度检查（变异测试，不需要 LLM）
   components/agent/            # ToolCallCard / WorkspacePanel / EvalPanel
-tests/agent.test.ts            # 15 个单元测试
+tests/agent.test.ts            # 34 个单元测试
 scripts/run-agent.ts           # CLI 单任务入口
-scripts/run-eval.ts            # CLI 评测入口
-assets/template-project/       # 沙箱模板项目（预埋 bug）
+scripts/run-eval.ts            # CLI 评测入口（--only default|holdout, --repeat N）
+scripts/run-ablation.ts        # CLI 对照实验入口
+scripts/check-sensitivity.ts   # CLI 评测灵敏度入口
+docs/EVALUATION.md             # 评测方法论（四层体系）
+assets/template-project/       # 主沙箱模板（mathutils，预埋 bug）
+assets/holdout-project/        # held-out 沙箱模板（stringutils，预置失败测试）
+assets/reference-solution/     # 参考解（灵敏度实验基线）
 ```
 
 ## 技术选型说明
@@ -207,9 +314,12 @@ assets/template-project/       # 沙箱模板项目（预埋 bug）
 
 ## Roadmap
 
+- [ ] **更难的任务集**：多文件、长链路、必须依赖环境反馈才能完成 —— 当前任务集区分度不足（见上文对照实验）
+- [ ] **多框架对照**：与 LangChain / 其他 Agent 实现跑同一批任务
+- [ ] **重复运行方差**：每个任务跑 N 轮，报通过率均值 ± 方差（LLM 有随机性）
+- [ ] **失败模式分类**：评测报告增加「失败原因归类」章节，而不只是通过率
 - [ ] diff 视图（变更前后对比）
 - [ ] 代码索引升级：AST / 向量检索替代 grep
-- [ ] 变异测试：向沙箱注入新 bug，验证评测灵敏度
 - [ ] 跨端 WebView 适配（Electron / UE / Maya 内嵌面板）
 - [ ] 多模型对比评测报告
 

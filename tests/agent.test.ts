@@ -130,3 +130,177 @@ describe('上下文压缩', () => {
     expect(estimateTokens('')).toBe(0)
   })
 })
+
+describe('对照实验支持（ablation）', () => {
+  test('filterTools：不传返回全部 7 个工具', async () => {
+    const { filterTools } = await import('@/lib/agent/tools')
+    expect(filterTools().length).toBe(7)
+  })
+
+  test('filterTools：传空数组返回 0 个（裸模型对照）', async () => {
+    const { filterTools } = await import('@/lib/agent/tools')
+    expect(filterTools([]).length).toBe(0)
+  })
+
+  test('filterTools：子集过滤保留指定工具', async () => {
+    const { filterTools } = await import('@/lib/agent/tools')
+    const picked = filterTools(['read_file', 'write_file'])
+    expect(picked.map((t) => t.function.name).sort()).toEqual(['read_file', 'write_file'])
+  })
+
+  test('filterTools：去掉 run_tests 可用于「无自我验证」组', async () => {
+    const { filterTools } = await import('@/lib/agent/tools')
+    const names = filterTools([
+      'list_files', 'read_file', 'write_file', 'search_code', 'run_command', 'git_operation',
+    ]).map((t) => t.function.name)
+    expect(names).not.toContain('run_tests')
+    expect(names.length).toBe(6)
+  })
+})
+
+describe('held-out 任务集（SWE-bench 式 FAIL_TO_PASS）', () => {
+  const HO = 'test-session-holdout'
+
+  beforeAll(async () => {
+    const { HOLDOUT_TEMPLATE_DIR } = await import('@/lib/agent/workspace')
+    if (workspaceExists(HO)) fs.rmSync(sessionDir(HO), { recursive: true, force: true })
+    createWorkspace(HO, HOLDOUT_TEMPLATE_DIR)
+  })
+
+  test('held-out 模板包含 stringutils 项目', async () => {
+    const out = await executeTool({ sessionId: HO }, 'list_files', {})
+    expect(out).toContain('stringutils.js')
+    expect(out).toContain('stringutils.test.js')
+  })
+
+  test('初始状态下全量测试应失败（存在待修复项）', async () => {
+    const { runInSandbox } = await import('@/lib/agent/tools')
+    const { code } = await runInSandbox(HO, ['node', '--test'])
+    expect(code).not.toBe(0)
+  })
+
+  test('初始状态下四个分组测试均失败（FAIL_TO_PASS 前置条件）', async () => {
+    const { runInSandbox } = await import('@/lib/agent/tools')
+    for (const pattern of ['slugify', 'camelCase', 'truncate', 'initials']) {
+      const { code } = await runInSandbox(HO, ['node', '--test', `--test-name-pattern=${pattern}`])
+      expect(code).not.toBe(0)
+    }
+  })
+
+  test('held-out 任务集共 4 个，且全部标记为 holdout', async () => {
+    const { HOLDOUT_TASKS } = await import('@/lib/eval/tasks')
+    expect(HOLDOUT_TASKS.length).toBe(4)
+    expect(HOLDOUT_TASKS.every((t) => t.holdout)).toBe(true)
+    expect(HOLDOUT_TASKS.every((t) => t.template === 'holdout')).toBe(true)
+  })
+
+  test('held-out 断言只依赖预置测试退出码，不含实现细节正则', async () => {
+    const { HOLDOUT_TASKS } = await import('@/lib/eval/tasks')
+    for (const t of HOLDOUT_TASKS) {
+      expect(t.assertions.length).toBe(1)
+      expect(t.assertions[0].name).toContain('分组测试通过')
+    }
+  })
+})
+
+describe('对照实验配置', () => {
+  test('内置 5 个 ablation 组 + 1 个裸模型组', async () => {
+    const { ABLATION_CONFIGS, BARE_CONFIG } = await import('@/lib/eval/ablation')
+    expect(ABLATION_CONFIGS.length).toBe(5)
+    expect(ABLATION_CONFIGS.map((c) => c.id)).toEqual([
+      'full', 'no-plan', 'no-verify', 'no-search', 'no-compress',
+    ])
+    expect(BARE_CONFIG.id).toBe('bare')
+  })
+
+  test('「无自我验证」组确实移除了 run_tests', async () => {
+    const { ABLATION_CONFIGS } = await import('@/lib/eval/ablation')
+    const noVerify = ABLATION_CONFIGS.find((c) => c.id === 'no-verify')!
+    expect(noVerify.toolFilter).toBeDefined()
+    expect(noVerify.toolFilter).not.toContain('run_tests')
+  })
+
+  test('「无规划」组关闭 plan，「无压缩」组关闭 useCompression', async () => {
+    const { ABLATION_CONFIGS } = await import('@/lib/eval/ablation')
+    expect(ABLATION_CONFIGS.find((c) => c.id === 'no-plan')!.plan).toBe(false)
+    expect(ABLATION_CONFIGS.find((c) => c.id === 'no-compress')!.useCompression).toBe(false)
+  })
+})
+
+describe('评测防作弊（原有测试用例不可删减）', () => {
+  const SID_CHEAT = 'test-session-cheat'
+  const SID_LEGIT = 'test-session-legit'
+
+  beforeAll(async () => {
+    const refDir = path.join(process.cwd(), 'assets', 'reference-solution')
+    for (const sid of [SID_CHEAT, SID_LEGIT]) {
+      if (workspaceExists(sid)) fs.rmSync(sessionDir(sid), { recursive: true, force: true })
+      createWorkspace(sid)
+      for (const f of ['mathutils.js', 'mathutils.test.js', 'README.md']) {
+        fs.copyFileSync(path.join(refDir, f), safeResolve(sid, f))
+      }
+    }
+  })
+
+  const fixBugAssertions = async () => {
+    const { EVAL_TASKS } = await import('@/lib/eval/tasks')
+    return EVAL_TASKS.find((t) => t.id === 'fix-bug')!.assertions
+  }
+
+  test('参考解（合法实现）应通过全部断言', async () => {
+    for (const a of await fixBugAssertions()) {
+      expect(await a.check(SID_LEGIT)).toBe(true)
+    }
+  })
+
+  test('删空测试文件会被防作弊断言拦住', async () => {
+    fs.writeFileSync(safeResolve(SID_CHEAT, 'mathutils.test.js'), `const test = require('node:test')\ntest('ok', () => {})\n`)
+    const asserts = await fixBugAssertions()
+    const results = await Promise.all(asserts.map((a) => a.check(SID_CHEAT)))
+    const cheatIdx = asserts.findIndex((a) => a.name.includes('防作弊'))
+    expect(cheatIdx).toBeGreaterThanOrEqual(0)
+    expect(results[cheatIdx]).toBe(false)
+  })
+
+  test('保留测试名但删掉 assert 同样会被拦住', async () => {
+    const refTest = fs.readFileSync(path.join(process.cwd(), 'assets', 'reference-solution', 'mathutils.test.js'), 'utf-8')
+    fs.writeFileSync(safeResolve(SID_CHEAT, 'mathutils.test.js'), refTest.replace(/assert\.[A-Za-z]+\(/g, 'void ('))
+    const asserts = await fixBugAssertions()
+    const cheatIdx = asserts.findIndex((a) => a.name.includes('防作弊'))
+    expect(await asserts[cheatIdx].check(SID_CHEAT)).toBe(false)
+  })
+
+  test('新增用例（合法行为）不会被误判为作弊', async () => {
+    const refTest = fs.readFileSync(path.join(process.cwd(), 'assets', 'reference-solution', 'mathutils.test.js'), 'utf-8')
+    fs.writeFileSync(safeResolve(SID_LEGIT, 'mathutils.test.js'), refTest + `\ntest('clamp 补充用例', () => {\n  assert.strictEqual(clamp(1, 1, 5), 1)\n})\n`)
+    const asserts = await fixBugAssertions()
+    const cheatIdx = asserts.findIndex((a) => a.name.includes('防作弊'))
+    expect(await asserts[cheatIdx].check(SID_LEGIT)).toBe(true)
+  })
+})
+
+describe('评测灵敏度实验配置', () => {
+  test('变异体覆盖作弊类与逻辑退化类', async () => {
+    const { MUTANTS } = await import('@/lib/eval/sensitivity')
+    const kinds = new Set(MUTANTS.map((m) => m.kind))
+    expect(kinds.has('cheat')).toBe(true)
+    expect(kinds.has('regression')).toBe(true)
+    expect(MUTANTS.length).toBeGreaterThanOrEqual(6)
+  })
+
+  test('每个变异体都指定了期望检出的目标任务', async () => {
+    const { MUTANTS } = await import('@/lib/eval/sensitivity')
+    const { ALL_TASKS } = await import('@/lib/eval/tasks')
+    const ids = ALL_TASKS.map((t) => t.id)
+    for (const m of MUTANTS) {
+      expect(ids).toContain(m.targetTaskId)
+    }
+  })
+
+  test('灵敏度检查：基线通过且变异体全部被检出', async () => {
+    const { checkSensitivity } = await import('@/lib/eval/sensitivity')
+    const r = await checkSensitivity()
+    expect(r.baselinePassed).toBe(true)
+    expect(r.detectionRate).toBe(100)
+  }, 60000)
+})

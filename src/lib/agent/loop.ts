@@ -7,7 +7,7 @@
  * 实时消费，保证 token 级流式输出与工具调用事件在同一事件流中交织输出。
  */
 import { chatStream, estimateTokens, type ChatMessageParam } from './llm'
-import { TOOLS, executeTool } from './tools'
+import { TOOLS, executeTool, filterTools } from './tools'
 import { compressContext } from './context'
 import { AGENT_SYSTEM_PROMPT, PLAN_SYSTEM_PROMPT } from './prompts'
 
@@ -35,6 +35,11 @@ export interface RunAgentOptions {
   history?: ChatMessageParam[]
   maxSteps?: number
   plan?: boolean
+  // ===== 以下开关用于对照实验（ablation），默认全部开启 =====
+  /** 是否启用上下文压缩 */
+  useCompression?: boolean
+  /** 只允许这些工具名参与编排（默认全部 7 个）；传空数组 = 无工具 */
+  toolFilter?: string[]
 }
 
 /** 简单异步事件队列：生产者 push，消费者以 async generator 形式实时取出 */
@@ -99,6 +104,9 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     const { sessionId, task, maxSteps = 14 } = opts
     const t0 = Date.now()
     const stats: AgentStats = { steps: 0, toolCalls: 0, tokensUsed: 0, durationMs: 0, finished: false }
+    // 对照实验用：按需裁剪可用工具集（默认全部 7 个）
+    const activeTools = filterTools(opts.toolFilter)
+    const useCompression = opts.useCompression !== false
 
     const messages: ChatMessageParam[] = [
       { role: 'system', content: AGENT_SYSTEM_PROMPT },
@@ -127,19 +135,21 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
         stats.steps = step
 
         // 上下文压缩：超预算时压缩早期工具结果
-        const compressed = compressContext(messages)
-        if (compressed.compressedCount > 0) {
-          messages.splice(0, messages.length, ...compressed.messages)
-          queue.push({
-            type: 'context',
-            tokensBefore: compressed.tokensBefore,
-            tokensAfter: compressed.tokensAfter,
-            compressedCount: compressed.compressedCount,
-          })
+        if (useCompression) {
+          const compressed = compressContext(messages)
+          if (compressed.compressedCount > 0) {
+            messages.splice(0, messages.length, ...compressed.messages)
+            queue.push({
+              type: 'context',
+              tokensBefore: compressed.tokensBefore,
+              tokensAfter: compressed.tokensAfter,
+              compressedCount: compressed.compressedCount,
+            })
+          }
         }
 
         // token 实时流式推入队列（与工具事件交织）
-        const res = await chatStream(messages, TOOLS, {
+        const res = await chatStream(messages, activeTools.length ? activeTools : undefined, {
           onToken: (text) => queue.push({ type: 'token', text }),
         })
         stats.tokensUsed += estimateTokens(

@@ -1,0 +1,337 @@
+{
+  "startedAt": "2026-09-26T09:04:13.488Z",
+  "durationMs": 579414,
+  "model": "qwen3.8-max",
+  "taskScope": "default",
+  "repeat": 3,
+  "summaries": [
+    {
+      "config": {
+        "id": "full",
+        "label": "A · 完整配置",
+        "note": "7 个工具 + 任务规划 + 上下文压缩"
+      },
+      "total": 12,
+      "passed": 12,
+      "passRate": 100,
+      "avgSteps": 6.6,
+      "avgToolCalls": 7.3,
+      "avgDurationMs": 44622,
+      "avgTokens": 8943,
+      "results": [
+        {
+          "taskId": "fix-bug",
+          "name": "修复 mathutils 使全部测试通过（第 1/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "全部测试通过",
+              "passed": true
+            },
+            {
+              "name": "average 分母已修正",
+              "passed": true
+            },
+            {
+              "name": "原有测试用例未被删减（防作弊）",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 7,
+            "toolCalls": 7,
+            "tokensUsed": 6695,
+            "durationMs": 34017,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "add-feature",
+          "name": "新增 clamp 函数并补测试（第 1/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "实现包含 clamp",
+              "passed": true
+            },
+            {
+              "name": "测试包含 clamp 用例",
+              "passed": true
+            },
+            {
+              "name": "全部测试通过",
+              "passed": true
+            },
+            {
+              "name": "原有测试用例未被删减（防作弊）",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 6,
+            "toolCalls": 7,
+            "tokensUsed": 5836,
+            "durationMs": 48993,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "perf-refactor",
+          "name": "将 fibonacci 重构为迭代实现（第 1/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "全部测试通过",
+              "passed": true
+            },
+            {
+              "name": "不再使用递归调用",
+              "passed": true
+            },
+            {
+              "name": "原有测试用例未被删减（防作弊）",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 8,
+            "toolCalls": 9,
+            "tokensUsed": 15938,
+            "durationMs": 59416,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "write-doc",
+          "name": "为 README 补充使用说明（第 1/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "README 含 API 章节",
+              "passed": true
+            },
+            {
+              "name": "README 含函数签名",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 6,
+            "toolCalls": 6,
+            "tokensUsed": 8657,
+            "durationMs": 44046,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "fix-bug",
+          "name": "修复 mathutils 使全部测试通过（第 2/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "全部测试通过",
+              "passed": true
+            },
+            {
+              "name": "average 分母已修正",
+              "passed": true
+            },
+            {
+              "name": "原有测试用例未被删减（防作弊）",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 6,
+            "toolCalls": 7,
+            "tokensUsed": 5672,
+            "durationMs": 32181,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "add-feature",
+          "name": "新增 clamp 函数并补测试（第 2/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "实现包含 clamp",
+              "passed": true
+            },
+            {
+              "name": "测试包含 clamp 用例",
+              "passed": true
+            },
+            {
+              "name": "全部测试通过",
+              "passed": true
+            },
+            {
+              "name": "原有测试用例未被删减（防作弊）",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 6,
+            "toolCalls": 7,
+            "tokensUsed": 5702,
+            "durationMs": 45878,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "perf-refactor",
+          "name": "将 fibonacci 重构为迭代实现（第 2/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "全部测试通过",
+              "passed": true
+            },
+            {
+              "name": "不再使用递归调用",
+              "passed": true
+            },
+            {
+              "name": "原有测试用例未被删减（防作弊）",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 6,
+            "toolCalls": 7,
+            "tokensUsed": 6933,
+            "durationMs": 46740,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "write-doc",
+          "name": "为 README 补充使用说明（第 2/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "README 含 API 章节",
+              "passed": true
+            },
+            {
+              "name": "README 含函数签名",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 7,
+            "toolCalls": 7,
+            "tokensUsed": 11908,
+            "durationMs": 47437,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "fix-bug",
+          "name": "修复 mathutils 使全部测试通过（第 3/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "全部测试通过",
+              "passed": true
+            },
+            {
+              "name": "average 分母已修正",
+              "passed": true
+            },
+            {
+              "name": "原有测试用例未被删减（防作弊）",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 6,
+            "toolCalls": 7,
+            "tokensUsed": 5644,
+            "durationMs": 32173,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "add-feature",
+          "name": "新增 clamp 函数并补测试（第 3/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "实现包含 clamp",
+              "passed": true
+            },
+            {
+              "name": "测试包含 clamp 用例",
+              "passed": true
+            },
+            {
+              "name": "全部测试通过",
+              "passed": true
+            },
+            {
+              "name": "原有测试用例未被删减（防作弊）",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 8,
+            "toolCalls": 9,
+            "tokensUsed": 15994,
+            "durationMs": 59818,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "perf-refactor",
+          "name": "将 fibonacci 重构为迭代实现（第 3/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "全部测试通过",
+              "passed": true
+            },
+            {
+              "name": "不再使用递归调用",
+              "passed": true
+            },
+            {
+              "name": "原有测试用例未被删减（防作弊）",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 6,
+            "toolCalls": 7,
+            "tokensUsed": 6965,
+            "durationMs": 35379,
+            "finished": true
+          }
+        },
+        {
+          "taskId": "write-doc",
+          "name": "为 README 补充使用说明（第 3/3 轮）",
+          "passed": true,
+          "assertionResults": [
+            {
+              "name": "README 含 API 章节",
+              "passed": true
+            },
+            {
+              "name": "README 含函数签名",
+              "passed": true
+            }
+          ],
+          "stats": {
+            "steps": 7,
+            "toolCalls": 8,
+            "tokensUsed": 11372,
+            "durationMs": 49389,
+            "finished": true
+          }
+        }
+      ]
+    }
+  ]
+}
