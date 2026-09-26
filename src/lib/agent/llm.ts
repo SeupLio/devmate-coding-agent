@@ -1,0 +1,143 @@
+/**
+ * LLM 封装层：统一处理 z-ai-web-dev-sdk 的流式 SSE 解析、
+ * 工具调用增量累积（tool_calls 分片合并）与非流式调用。
+ * 内置指数退避重试（应对 429 限流），保证长评测链路的鲁棒性。
+ */
+import ZAI from 'z-ai-web-dev-sdk'
+
+export interface ChatMessageParam {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content?: string | null
+  tool_calls?: ToolCall[]
+  tool_call_id?: string
+  name?: string
+}
+
+export interface ToolCall {
+  id: string
+  type: 'function'
+  function: { name: string; arguments: string }
+}
+
+export interface StreamCallbacks {
+  onToken?: (text: string) => void
+}
+
+export interface StreamResult {
+  content: string
+  toolCalls: ToolCall[]
+  finishReason: string | null
+  usage?: { prompt_tokens?: number; completion_tokens?: number }
+}
+
+let zaiPromise: Promise<ZAI> | null = null
+async function getClient(): Promise<ZAI> {
+  if (!zaiPromise) zaiPromise = ZAI.create() as Promise<ZAI>
+  return zaiPromise
+}
+
+/** 粗略 token 估算：中文约 1 字/token，英文约 4 字符/token，取折中 2 字符/token */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 2)
+}
+
+/** 指数退避：429/5xx 时最多重试 5 次，等待 2^n 秒（上限 40s）+ 抖动 */
+function backoffDelay(attempt: number): number {
+  return Math.min(2 ** attempt, 40) * 1000 + Math.random() * 1000
+}
+
+function isRetryable(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg.includes('429') || msg.includes('Too many requests') || msg.includes('502') || msg.includes('503')
+}
+
+async function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+/**
+ * 流式对话补全：解析原始 SSE 字节流，累积 content 与 tool_calls 分片。
+ * 429 限流时指数退避重试。
+ */
+export async function chatStream(
+  messages: ChatMessageParam[],
+  tools?: unknown[],
+  cb?: StreamCallbacks,
+): Promise<StreamResult> {
+  const zai = await getClient()
+  const body: Record<string, unknown> = { messages, stream: true }
+  if (tools && tools.length) {
+    body.tools = tools
+    body.tool_choice = 'auto'
+  }
+
+  const MAX_RETRIES = 5
+  let lastError: unknown
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const stream = (await zai.chat.completions.create(body)) as AsyncIterable<unknown>
+      let buf = ''
+      let content = ''
+      let finishReason: string | null = null
+      let usage: StreamResult['usage']
+      const toolAcc = new Map<number, ToolCall>()
+
+      for await (const chunk of stream) {
+        const text =
+          typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf-8')
+        buf += text
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          const l = line.trim()
+          if (!l.startsWith('data:')) continue
+          const payload = l.slice(5).trim()
+          if (!payload || payload === '[DONE]') continue
+          let j: any
+          try {
+            j = JSON.parse(payload)
+          } catch {
+            continue
+          }
+          if (j?.usage) usage = j.usage
+          const choice = j?.choices?.[0]
+          if (!choice) continue
+          if (choice.finish_reason) finishReason = choice.finish_reason
+          const delta = choice.delta
+          if (!delta) continue
+          if (typeof delta.content === 'string' && delta.content) {
+            content += delta.content
+            cb?.onToken?.(delta.content)
+          }
+          if (Array.isArray(delta.tool_calls)) {
+            for (const tc of delta.tool_calls) {
+              const idx: number = tc.index ?? 0
+              let acc = toolAcc.get(idx)
+              if (!acc) {
+                acc = { id: '', type: 'function', function: { name: '', arguments: '' } }
+                toolAcc.set(idx, acc)
+              }
+              if (tc.id) acc.id = tc.id
+              if (tc.function?.name) acc.function.name += tc.function.name
+              if (tc.function?.arguments) acc.function.arguments += tc.function.arguments
+            }
+          }
+        }
+      }
+      return {
+        content,
+        toolCalls: [...toolAcc.values()].filter((t) => t.function.name),
+        finishReason,
+        usage,
+      }
+    } catch (e) {
+      lastError = e
+      if (isRetryable(e) && attempt < MAX_RETRIES) {
+        await sleep(backoffDelay(attempt))
+        continue
+      }
+      throw e
+    }
+  }
+  throw lastError
+}

@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../db/custom.db"
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  title     String    @default("新任务")
+  status    String    @default("idle") // idle | running | done | error
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String // user | assistant | tool_call | tool_result | plan | system
+  content   String
+  meta      String? // JSON: {name, args, result, steps, stats...}
+  createdAt DateTime @default(now())
+}
