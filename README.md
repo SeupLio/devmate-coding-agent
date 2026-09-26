@@ -127,6 +127,12 @@ OPENAI_BASE_URL=https://api.deepseek.com      # 默认 https://api.openai.com/v1
 OPENAI_API_KEY=sk-xxxxxx
 OPENAI_MODEL=deepseek-chat                    # 默认 gpt-4o-mini
 
+# 智谱开放平台（GLM-4-Flash 有免费额度）
+LLM_PROVIDER=openai
+OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+OPENAI_API_KEY=你的Key
+OPENAI_MODEL=glm-4-flash
+
 # 方式二：智谱清言内部 SDK（仅在智谱沙箱内有凭证时可用）
 LLM_PROVIDER=zai
 ```
