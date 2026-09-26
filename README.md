@@ -112,6 +112,28 @@ bun run db:push     # 初始化 SQLite（Prisma）
 bun run dev         # http://localhost:3000
 ```
 
+### 配置 LLM（首次运行必做）
+
+项目支持两种 LLM 接入，通过环境变量 `LLM_PROVIDER` 切换（默认 `openai`）：
+
+```bash
+cp .env.example .env   # 然后填入你的密钥
+```
+
+```bash
+# 方式一（推荐）：任意 OpenAI 兼容厂商 —— DeepSeek / 通义千问 / OpenAI 官方 / vLLM / Ollama
+LLM_PROVIDER=openai
+OPENAI_BASE_URL=https://api.deepseek.com      # 默认 https://api.openai.com/v1
+OPENAI_API_KEY=sk-xxxxxx
+OPENAI_MODEL=deepseek-chat                    # 默认 gpt-4o-mini
+
+# 方式二：智谱清言内部 SDK（仅在智谱沙箱内有凭证时可用）
+LLM_PROVIDER=zai
+```
+
+> Windows 用户请先安装 [Bun](https://bun.sh)（或 `npm i -g bun`）与 Git，
+> 并把 `C:\Program Files\Git\usr\bin` 加入 PATH，否则 Agent 的 `ls / cat / grep` 会报"找不到命令"。
+
 在页面输入任务（或点击快捷任务），观察 Agent 全过程：
 
 - **中间对话区**：任务规划清单 → 流式思考文本 → 可展开的工具调用卡片（参数/结果）
@@ -163,7 +185,7 @@ assets/template-project/       # 沙箱模板项目（预埋 bug）
 
 ## 技术选型说明
 
-- **LLM 接入**：本项目使用内部 LLM SDK（OpenAI 兼容风格）。所有模型调用集中在 `src/lib/agent/llm.ts` 一个模块内（约 150 行），**换 OpenAI / DeepSeek / Qwen 只需改这一个文件**。
+- **LLM 接入**：所有模型调用集中在 `src/lib/agent/` 下三个文件——`llm.ts`（provider 路由）、`llm.openai.ts`（OpenAI 兼容实现）、`llm.zai.ts`（智谱内部 SDK 实现）。**换 OpenAI / DeepSeek / Qwen 无需改代码，只改环境变量**；新增厂商也只需再加一个同签名模块。
 - **为什么手写 Agent 循环而不用 LangChain**：Coding Agent 的核心难点在工具设计、上下文预算与评测，框架把这些藏起来了。手写一遍，才知道 Claude Code 们到底在做什么工程。
 - **为什么用 node:test 而不是 jest**：沙箱项目要极简可运行，Node 22 内置测试器零依赖。
 

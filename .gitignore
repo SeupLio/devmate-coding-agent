@@ -7,3 +7,7 @@ server.log
 *.log
 .DS_Store
 .env
+.env.local
+
+# Next.js 自动生成
+next-env.d.ts
