@@ -47,7 +47,17 @@ function backoffDelay(attempt: number): number {
 
 function isRetryable(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e)
-  return /429|Too many requests|502|503|504/.test(msg)
+  // HTTP 限流/网关抖动
+  if (/429|Too many requests|502|503|504/.test(msg)) return true
+  // 网络层中断：连接被对端关闭、DNS/TLS 抖动、undici 的 "fetch failed"
+  // （长流式响应下中转站偶发断连，重试即可恢复；不重试会直接把任务判失败）
+  if (/fetch failed|socket|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|UND_ERR|terminated|other side closed/i.test(msg)) {
+    return true
+  }
+  // 流读取中途断开时抛出的 TypeError（undici 把 cause 藏在 error.cause 里）
+  const cause = (e as { cause?: unknown })?.cause
+  if (cause && cause !== e) return isRetryable(cause)
+  return false
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
