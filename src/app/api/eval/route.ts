@@ -7,8 +7,12 @@ export const maxDuration = 600
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const taskIds = Array.isArray(body.taskIds) ? (body.taskIds as string[]).map(String) : undefined
-  const only = body.only === 'holdout' || body.only === 'default' ? body.only : undefined
+  const only =
+    body.only === 'holdout' || body.only === 'default' || body.only === 'hard' || body.only === 'all'
+      ? (body.only as 'holdout' | 'default' | 'hard' | 'all')
+      : undefined
   const repeat = Number.isFinite(body.repeat) ? Number(body.repeat) : 1
+  const maxSteps = Number.isFinite(body.maxSteps) ? Number(body.maxSteps) : undefined
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -17,7 +21,7 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
       }
       try {
-        for await (const ev of runEvaluation({ taskIds, only, repeat })) {
+        for await (const ev of runEvaluation({ taskIds, only, repeat, maxSteps })) {
           send(ev)
         }
       } catch (e) {

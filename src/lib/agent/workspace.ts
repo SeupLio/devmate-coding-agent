@@ -18,6 +18,15 @@ export function ensureWorkspaceRoot() {
 const TEMPLATE_DIR = path.join(process.cwd(), 'assets', 'template-project')
 /** 备用模板：用于 held-out 评测（与主模板不同的问题域，避免过拟合） */
 export const HOLDOUT_TEMPLATE_DIR = path.join(process.cwd(), 'assets', 'holdout-project')
+/** 难任务模板：多文件 / 长链路 / 依赖环境反馈 */
+export const HARD_TEMPLATE_DIR = path.join(process.cwd(), 'assets', 'hard-project')
+
+/** 模板名 → 目录，供评测按任务选择沙箱 */
+export function templateDir(name?: 'default' | 'holdout' | 'hard'): string | undefined {
+  if (name === 'holdout') return HOLDOUT_TEMPLATE_DIR
+  if (name === 'hard') return HARD_TEMPLATE_DIR
+  return undefined // undefined → createWorkspace 使用默认 TEMPLATE_DIR
+}
 
 export function sessionDir(sessionId: string) {
   return path.join(WORKSPACE_ROOT, sessionId)
@@ -87,4 +96,25 @@ export function safeResolve(sessionId: string, relPath: string): string {
 
 export function newRunId() {
   return randomUUID().slice(0, 8)
+}
+
+/** 项目记忆文件名（对标 Claude Code 的 CLAUDE.md） */
+export const PROJECT_MEMORY_FILE = 'DEVmate.md'
+/** 上限：避免把超大文件塞进系统提示 */
+const PROJECT_MEMORY_MAX = 4000
+
+/**
+ * 读取沙箱内的项目说明文件（DEVmate.md），作为系统提示的一部分。
+ * 不存在或读取失败时返回 null。
+ */
+export function readProjectMemory(sessionId: string): string | null {
+  try {
+    const p = safeResolve(sessionId, PROJECT_MEMORY_FILE)
+    if (!fs.existsSync(p) || !fs.statSync(p).isFile()) return null
+    const text = fs.readFileSync(p, 'utf-8').trim()
+    if (!text) return null
+    return text.length > PROJECT_MEMORY_MAX ? text.slice(0, PROJECT_MEMORY_MAX) + '\n...(已截断)' : text
+  } catch {
+    return null
+  }
 }

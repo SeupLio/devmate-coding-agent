@@ -12,10 +12,12 @@ export interface EvalTask {
   id: string
   name: string
   prompt: string
-  /** 沙箱模板：默认 mathutils 项目；'holdout' 使用 stringutils held-out 项目 */
-  template?: 'default' | 'holdout'
+  /** 沙箱模板：默认 mathutils 项目；'holdout' 用 stringutils；'hard' 用多文件计算器项目 */
+  template?: 'default' | 'holdout' | 'hard'
   /** 是否属于 held-out 集（不参与日常调试，用于验证泛化） */
   holdout?: boolean
+  /** 难度标记，用于分组统计 */
+  difficulty?: 'basic' | 'hard'
   /** 断言：全部通过才算任务成功 */
   assertions: {
     name: string
@@ -88,6 +90,65 @@ function fileContains(sessionId: string, file: string, keyword: string): Promise
   return Promise.resolve(() => undefined).then(() => {
     try {
       return fs.readFileSync(safeResolve(sessionId, file), 'utf-8').includes(keyword)
+    } catch {
+      return false
+    }
+  })
+}
+
+// ===== 难任务项目（hard-project）专用断言 =====
+
+const HARD_TEST_PATH = path.join(process.cwd(), 'assets', 'hard-project', 'test', 'calc.test.js')
+
+function hardTestProfile(): { names: string[] } {
+  try {
+    const src = fs.readFileSync(HARD_TEST_PATH, 'utf-8')
+    return { names: [...src.matchAll(/test\(\s*['"`]([^'"`]+)['"`]/g)].map((m) => m[1]) }
+  } catch {
+    return { names: [] }
+  }
+}
+
+const HARD_TEST_PROFILE = hardTestProfile()
+
+/** 防作弊：难项目的预置测试用例必须一个不少 */
+function hardTestsIntact(sessionId: string): Promise<boolean> {
+  return Promise.resolve().then(() => {
+    try {
+      const cur = fs.readFileSync(safeResolve(sessionId, 'test/calc.test.js'), 'utf-8')
+      return HARD_TEST_PROFILE.names.every((n) => cur.includes(n))
+    } catch {
+      return false
+    }
+  })
+}
+
+/**
+ * golden 组的期望值（= 参考实现 tools/reference.js 的输出）。
+ *
+ * 为什么必须交叉校验：golden 测试比较 `evaluate(expr)` 与 `expected[expr]`，
+ * 若只断言「测试通过」，Agent 可以把 expected.json 写成**当前的错误输出**，
+ * 从而让测试自洽地通过。用已知正确值做交叉校验即可堵住这条作弊路径。
+ */
+export const HARD_GOLDEN: Record<string, number> = {
+  '2 + 3 * 4': 14,
+  '(2 + 3) * 4': 20,
+  '10 - 2 - 3': 5,
+  '-3 + 5': 2,
+  '7 % 3': 1,
+  '-7 % 3': 2,
+  '7 % -3': -2,
+  '-7 % -3': -1,
+}
+
+function hardGoldenFileCorrect(sessionId: string): Promise<boolean> {
+  return Promise.resolve().then(() => {
+    try {
+      const got = JSON.parse(fs.readFileSync(safeResolve(sessionId, 'data/expected.json'), 'utf-8')) as Record<
+        string,
+        unknown
+      >
+      return Object.entries(HARD_GOLDEN).every(([k, v]) => Number(got[k]) === v)
     } catch {
       return false
     }
@@ -190,7 +251,66 @@ export const HOLDOUT_TASKS: EvalTask[] = [
   },
 ]
 
-export const ALL_TASKS: EvalTask[] = [...EVAL_TASKS, ...HOLDOUT_TASKS]
+/**
+ * 难任务集：在**多文件项目**（hard-project）上考察三类更接近真实工程的能力：
+ *  1. hard-precedence —— 跨 lexer/parser/evaluator 定位并修复优先级缺陷（多文件追踪）
+ *  2. hard-variables  —— 跨 3 个文件实现一个贯穿式特性（长链路改造）
+ *  3. hard-golden     —— 期望值不在任何文件里，**必须运行参考脚本**才能获得（依赖环境反馈）
+ *
+ * 断言同样只取「预置测试分组的退出码」，另加两条防作弊断言：
+ * 测试文件未被删改、expected.json 必须等于参考实现的真值。
+ */
+export const HARD_TASKS: EvalTask[] = [
+  {
+    id: 'hard-precedence',
+    name: '[难] 修复运算符优先级与一元负号（跨文件定位）',
+    template: 'hard',
+    difficulty: 'hard',
+    prompt:
+      '表达式计算器的结果不对：`2 + 3 * 4` 得到 20（应为 14），`-3 + 5` 直接抛错。'
+      + '请阅读 src/lexer.js、src/parser.js、src/evaluator.js 定位问题，'
+      + '修复运算符优先级（* / % 高于 + -，同级左结合）并支持一元负号，'
+      + '使 `node --test --test-name-pattern="precedence"` 通过（不要修改 test/ 下的测试文件），然后提交。',
+    assertions: [
+      { name: 'precedence 分组测试通过', check: (s) => testsPassFor(s, 'precedence') },
+      { name: '测试文件未被删改（防作弊）', check: (s) => hardTestsIntact(s) },
+    ],
+  },
+  {
+    id: 'hard-variables',
+    name: '[难] 实现变量赋值与多语句（跨 3 文件长链路）',
+    template: 'hard',
+    difficulty: 'hard',
+    prompt:
+      '表达式计算器需要支持变量：`x = 5; x * 2` 应得 10，`a = 2; b = a + 3; a * b` 应得 10。'
+      + '请扩展 src/lexer.js（识别 = 与 ;）、src/parser.js（多语句与赋值语句）、'
+      + 'src/evaluator.js（赋值求值与变量环境），使 `node --test --test-name-pattern="variables"` 通过'
+      + '（不要修改测试文件），然后提交。',
+    assertions: [
+      { name: 'variables 分组测试通过', check: (s) => testsPassFor(s, 'variables') },
+      { name: '测试文件未被删改（防作弊）', check: (s) => hardTestsIntact(s) },
+    ],
+  },
+  {
+    id: 'hard-golden',
+    name: '[难] 生成期望值并修正取模语义（必须依赖环境反馈）',
+    template: 'hard',
+    difficulty: 'hard',
+    prompt:
+      'data/cases.json 列出了一批表达式，但期望值文件 data/expected.json 尚未生成。'
+      + '期望值不在任何源码或文档中写死，只能通过运行参考实现获得：`node tools/reference.js --emit`。'
+      + '请把该命令的输出写入 data/expected.json，再修正 src/evaluator.js 的取模语义'
+      + '（本项目约定数学取模：结果符号跟随除数，与 JavaScript 余数不同），'
+      + '使 `node --test --test-name-pattern="golden"` 通过（不要修改测试文件），然后提交。',
+    assertions: [
+      { name: 'expected.json 等于参考实现真值（防作弊）', check: (s) => hardGoldenFileCorrect(s) },
+      { name: 'golden 分组测试通过', check: (s) => testsPassFor(s, 'golden') },
+      { name: '测试文件未被删改（防作弊）', check: (s) => hardTestsIntact(s) },
+    ],
+  },
+]
+
+export const ALL_TASKS: EvalTask[] = [...EVAL_TASKS, ...HOLDOUT_TASKS, ...HARD_TASKS]
 
 export function tasksByIds(ids: string[]): EvalTask[] {
   return ALL_TASKS.filter((t) => ids.includes(t.id))

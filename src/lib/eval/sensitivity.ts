@@ -13,15 +13,19 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createWorkspace, newRunId, safeResolve } from '@/lib/agent/workspace'
-import { ALL_TASKS, type EvalTask } from './tasks'
+import { ALL_TASKS, HARD_GOLDEN, type EvalTask } from './tasks'
 
 const REFERENCE_DIR = path.join(process.cwd(), 'assets', 'reference-solution')
+const HARD_TEMPLATE_DIR = path.join(process.cwd(), 'assets', 'hard-project')
+const HARD_REF_SRC = path.join(process.cwd(), 'assets', 'hard-reference', 'src')
 
 export interface Mutant {
   id: string
   name: string
   /** 缺陷类别：作弊类 / 逻辑退化类 */
   kind: 'cheat' | 'regression'
+  /** 所属模板：default（mathutils）/ hard（多文件计算器） */
+  template?: 'default' | 'hard'
   /** 说明这个变异体模拟什么 */
   note: string
   /** 期望被哪个任务的断言检出 */
@@ -32,6 +36,7 @@ export interface Mutant {
 
 function write(sid: string, rel: string, content: string) {
   const p = safeResolve(sid, rel)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
   fs.writeFileSync(p, content)
 }
 
@@ -40,7 +45,15 @@ function read(sid: string, rel: string): string {
 }
 
 /** 用参考解初始化沙箱（已知正确答案） */
-function seedReference(sid: string) {
+function seedReference(sid: string, template: 'default' | 'hard' = 'default') {
+  if (template === 'hard') {
+    createWorkspace(sid, HARD_TEMPLATE_DIR)
+    for (const f of ['lexer.js', 'parser.js', 'evaluator.js', 'index.js']) {
+      fs.copyFileSync(path.join(HARD_REF_SRC, f), safeResolve(sid, `src/${f}`))
+    }
+    write(sid, 'data/expected.json', JSON.stringify(HARD_GOLDEN, null, 2))
+    return
+  }
   createWorkspace(sid)
   for (const f of ['mathutils.js', 'mathutils.test.js', 'README.md']) {
     write(sid, f, fs.readFileSync(path.join(REFERENCE_DIR, f), 'utf-8'))
@@ -132,6 +145,74 @@ export const MUTANTS: Mutant[] = [
       write(sid, 'mathutils.js', src.replace('if (x < lo) return lo', 'if (x < lo) return hi'))
     },
   },
+
+  // ===== 难任务项目（hard-project）的变异体 =====
+  {
+    id: 'hard-eq-precedence',
+    name: '[难] 所有运算符同级（原优先级缺陷）',
+    kind: 'regression',
+    template: 'hard',
+    note: '把 PRECEDENCE 全改成 1，于是 2 + 3 * 4 被算成 (2+3)*4 = 20',
+    targetTaskId: 'hard-precedence',
+    apply: (sid) => {
+      const src = read(sid, 'src/parser.js')
+      write(
+        sid,
+        'src/parser.js',
+        src.replace(
+          /const PRECEDENCE = \{[^}]*\}/,
+          'const PRECEDENCE = { "+": 1, "-": 1, "*": 1, "/": 1, "%": 1 }',
+        ),
+      )
+    },
+  },
+  {
+    id: 'hard-no-unary',
+    name: '[难] 去掉一元负号处理',
+    kind: 'regression',
+    template: 'hard',
+    note: 'parseUnary 不再识别前缀 -，`-3 + 5` 直接抛错',
+    targetTaskId: 'hard-precedence',
+    apply: (sid) => {
+      const src = read(sid, 'src/parser.js')
+      write(sid, 'src/parser.js', src.replace(/if \(peek\(\)\.type === 'op' && \(peek\(\)\.value === '-' \|\| peek\(\)\.value === '\+'\)\) \{/, 'if (false) {'))
+    },
+  },
+  {
+    id: 'hard-js-modulo',
+    name: '[难] 用 JS 余数代替数学取模',
+    kind: 'regression',
+    template: 'hard',
+    note: '-7 % 3 得到 -1，而期望是 2',
+    targetTaskId: 'hard-golden',
+    apply: (sid) => {
+      const src = read(sid, 'src/evaluator.js')
+      write(sid, 'src/evaluator.js', src.replace(/return \(\(a % b\) \+ b\) % b/, 'return a % b'))
+    },
+  },
+  {
+    id: 'hard-cheat-golden',
+    name: '[难] 伪造 expected.json 使其自洽',
+    kind: 'cheat',
+    template: 'hard',
+    note: '同时植入 JS 余数缺陷并把 expected.json 写成与缺陷一致的值 —— golden 测试会「通过」，只有防作弊断言能拦住',
+    targetTaskId: 'hard-golden',
+    apply: (sid) => {
+      const src = read(sid, 'src/evaluator.js')
+      write(sid, 'src/evaluator.js', src.replace(/return \(\(a % b\) \+ b\) % b/, 'return a % b'))
+      const selfConsistent = {
+        '2 + 3 * 4': 14,
+        '(2 + 3) * 4': 20,
+        '10 - 2 - 3': 5,
+        '-3 + 5': 2,
+        '7 % 3': 1,
+        '-7 % 3': -1,
+        '7 % -3': 1,
+        '-7 % -3': -1,
+      }
+      write(sid, 'data/expected.json', JSON.stringify(selfConsistent, null, 2))
+    },
+  },
 ]
 
 /**
@@ -181,12 +262,18 @@ export async function checkSensitivity(): Promise<SensitivityReport> {
   const taskById = (id: string) => ALL_TASKS.find((t) => t.id === id)!
 
   // ===== 基线：参考解应当让所有断言通过，否则实验前提不成立 =====
+  // 默认模板（mathutils）与难任务模板（hard-project）各建一个参考沙箱；
+  // holdout 集没有配套参考解，不参与基线。
   const baseSid = `sens-base-${newRunId()}`
-  seedReference(baseSid)
+  seedReference(baseSid, 'default')
+  const hardBaseSid = `sens-hardbase-${newRunId()}`
+  seedReference(hardBaseSid, 'hard')
+
   const baseResults: string[] = []
   let baselinePassed = true
   for (const task of ALL_TASKS.filter((t) => t.template !== 'holdout')) {
-    const rs = await runAssertions(task, baseSid)
+    const sid = task.template === 'hard' ? hardBaseSid : baseSid
+    const rs = await runAssertions(task, sid)
     const ok = rs.every((r) => r.passed)
     if (!ok) baselinePassed = false
     baseResults.push(`${task.id}: ${ok ? '全部通过' : '存在失败 → ' + rs.filter((r) => !r.passed).map((r) => r.name).join('、')}`)
@@ -196,7 +283,7 @@ export async function checkSensitivity(): Promise<SensitivityReport> {
   const results: SensitivityResult[] = []
   for (const m of MUTANTS) {
     const sid = `sens-${m.id}-${newRunId()}`
-    seedReference(sid)
+    seedReference(sid, m.template ?? 'default')
     m.apply(sid)
     const rs = await runAssertions(taskById(m.targetTaskId), sid)
     const failedAssertions = rs.filter((r) => !r.passed).map((r) => r.name)

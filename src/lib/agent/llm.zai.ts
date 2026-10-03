@@ -68,7 +68,9 @@ export async function chatStream(
   let lastError: unknown
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const stream = (await zai.chat.completions.create(body)) as AsyncIterable<unknown>
+      const stream = (await zai.chat.completions.create(
+        body as unknown as Parameters<typeof zai.chat.completions.create>[0],
+      )) as AsyncIterable<unknown>
       let buf = ''
       let content = ''
       let finishReason: string | null = null

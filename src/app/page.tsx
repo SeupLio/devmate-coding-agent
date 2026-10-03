@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ToolCallCard } from '@/components/agent/ToolCallCard'
 import { WorkspacePanel } from '@/components/agent/WorkspacePanel'
 import { EvalPanel } from '@/components/agent/EvalPanel'
-import type { AgentStats, SessionInfo, SSEEvent, UIMessage } from '@/components/agent/types'
+import type { AgentStats, SessionInfo, SSEEvent, TodoItemUI, UIMessage } from '@/components/agent/types'
 import { Bot, GitBranch, ListChecks, Plus, Send, Sparkles, Square, User } from 'lucide-react'
 
 const QUICK_TASKS = [
@@ -27,6 +27,7 @@ export default function Home() {
   const [task, setTask] = useState('')
   const [running, setRunning] = useState(false)
   const [stats, setStats] = useState<AgentStats | null>(null)
+  const [todos, setTodos] = useState<TodoItemUI[]>([])
   const [fileRefreshKey, setFileRefreshKey] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -105,6 +106,7 @@ export default function Home() {
     }
     setTask('')
     setRunning(true)
+    setTodos([])
     setMessages((ms) => [...ms, { id: `u${Date.now()}`, kind: 'user', text }])
 
     const controller = new AbortController()
@@ -182,6 +184,9 @@ export default function Home() {
             ),
           )
           setFileRefreshKey((k) => k + 1)
+          break
+        case 'todos':
+          setTodos(ev.todos)
           break
         case 'context':
           setMessages((ms) => [
@@ -266,6 +271,7 @@ export default function Home() {
         {/* 中：对话 */}
         <main className="col-span-12 flex min-h-0 flex-col md:col-span-7">
           <ScrollArea className="min-h-0 flex-1 p-4">
+            {todos.length > 0 && <TodoPanel todos={todos} />}
             {messages.length === 0 && <EmptyState onPick={(t) => setTask(t)} />}
             <div className="space-y-3">
               {messages.map((m) => (
@@ -353,6 +359,44 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
         ))}
       </div>
     </div>
+  )
+}
+
+/** 任务清单（对标 Claude Code 的 TodoWrite 展示） */
+function TodoPanel({ todos }: { todos: TodoItemUI[] }) {
+  const done = todos.filter((t) => t.status === 'completed').length
+  return (
+    <Card className="mb-3 border-sky-200 bg-sky-50/50 shadow-none">
+      <CardHeader className="flex flex-row items-center gap-2 py-2">
+        <ListChecks className="h-4 w-4 text-sky-600" />
+        <CardTitle className="text-xs">任务清单</CardTitle>
+        <span className="ml-auto text-[10px] text-muted-foreground">
+          {done}/{todos.length}
+        </span>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <ul className="space-y-0.5 text-xs">
+          {todos.map((t, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <span className="mt-[1px] w-3 shrink-0 text-center">
+                {t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '▶' : '○'}
+              </span>
+              <span
+                className={
+                  t.status === 'completed'
+                    ? 'text-muted-foreground line-through'
+                    : t.status === 'in_progress'
+                      ? 'font-medium text-sky-700'
+                      : 'text-muted-foreground'
+                }
+              >
+                {t.status === 'in_progress' && t.activeForm ? t.activeForm : t.content}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   )
 }
 

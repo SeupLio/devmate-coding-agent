@@ -1,17 +1,17 @@
 {
   "baselinePassed": true,
-  "baselineDetail": "fix-bug: 全部通过｜add-feature: 全部通过｜perf-refactor: 全部通过｜write-doc: 全部通过",
-  "total": 7,
-  "detected": 7,
+  "baselineDetail": "fix-bug: 全部通过｜add-feature: 全部通过｜perf-refactor: 全部通过｜write-doc: 全部通过｜hard-precedence: 全部通过｜hard-variables: 全部通过｜hard-golden: 全部通过",
+  "total": 11,
+  "detected": 11,
   "detectionRate": 100,
   "byKind": {
     "cheat": {
-      "total": 2,
-      "detected": 2
+      "total": 3,
+      "detected": 3
     },
     "regression": {
-      "total": 5,
-      "detected": 5
+      "total": 8,
+      "detected": 8
     }
   },
   "results": [
@@ -90,6 +90,50 @@
       "detected": true,
       "failedAssertions": [
         "全部测试通过"
+      ]
+    },
+    {
+      "mutantId": "hard-eq-precedence",
+      "name": "[难] 所有运算符同级（原优先级缺陷）",
+      "kind": "regression",
+      "note": "把 PRECEDENCE 全改成 1，于是 2 + 3 * 4 被算成 (2+3)*4 = 20",
+      "targetTaskId": "hard-precedence",
+      "detected": true,
+      "failedAssertions": [
+        "precedence 分组测试通过"
+      ]
+    },
+    {
+      "mutantId": "hard-no-unary",
+      "name": "[难] 去掉一元负号处理",
+      "kind": "regression",
+      "note": "parseUnary 不再识别前缀 -，`-3 + 5` 直接抛错",
+      "targetTaskId": "hard-precedence",
+      "detected": true,
+      "failedAssertions": [
+        "precedence 分组测试通过"
+      ]
+    },
+    {
+      "mutantId": "hard-js-modulo",
+      "name": "[难] 用 JS 余数代替数学取模",
+      "kind": "regression",
+      "note": "-7 % 3 得到 -1，而期望是 2",
+      "targetTaskId": "hard-golden",
+      "detected": true,
+      "failedAssertions": [
+        "golden 分组测试通过"
+      ]
+    },
+    {
+      "mutantId": "hard-cheat-golden",
+      "name": "[难] 伪造 expected.json 使其自洽",
+      "kind": "cheat",
+      "note": "同时植入 JS 余数缺陷并把 expected.json 写成与缺陷一致的值 —— golden 测试会「通过」，只有防作弊断言能拦住",
+      "targetTaskId": "hard-golden",
+      "detected": true,
+      "failedAssertions": [
+        "expected.json 等于参考实现真值（防作弊）"
       ]
     }
   ]

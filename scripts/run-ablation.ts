@@ -22,7 +22,7 @@ function arg(name: string): string | undefined {
 async function main() {
   const configs = arg('configs')?.split(',').filter(Boolean)
   const tasks = arg('tasks')?.split(',').filter(Boolean)
-  const only = (arg('only') as 'default' | 'holdout' | 'all') ?? 'default'
+  const only = (arg('only') as 'default' | 'holdout' | 'hard' | 'all') ?? 'default'
   const repeat = Number(arg('repeat') ?? 1) || 1
   const includeBare = !process.argv.includes('--no-bare')
 

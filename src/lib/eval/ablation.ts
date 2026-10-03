@@ -15,15 +15,21 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { chatStream } from '@/lib/agent/llm'
-import { createWorkspace, newRunId, sessionDir, HOLDOUT_TEMPLATE_DIR } from '@/lib/agent/workspace'
+import { TOOLS } from '@/lib/agent/tools'
+import { createWorkspace, newRunId, sessionDir, templateDir } from '@/lib/agent/workspace'
 import { runEvaluation, type AgentRunConfig, type EvalRunResult } from './runner'
-import { EVAL_TASKS, HOLDOUT_TASKS, type EvalTask } from './tasks'
+import { EVAL_TASKS, HOLDOUT_TASKS, HARD_TASKS, ALL_TASKS, type EvalTask } from './tasks'
+
+/** 全部工具名（从工具定义派生，新增工具后无需手工同步） */
+const ALL_TOOL_NAMES = TOOLS.map((t) => t.function.name)
+/** 从完整工具集中去掉若干工具，得到某实验组的工具子集 */
+const without = (...names: string[]) => ALL_TOOL_NAMES.filter((n) => !names.includes(n))
 
 export const ABLATION_CONFIGS: AgentRunConfig[] = [
   {
     id: 'full',
     label: 'A · 完整配置',
-    note: '7 个工具 + 任务规划 + 上下文压缩',
+    note: `${ALL_TOOL_NAMES.length} 个工具 + 任务规划 + 上下文压缩`,
   },
   {
     id: 'no-plan',
@@ -34,18 +40,30 @@ export const ABLATION_CONFIGS: AgentRunConfig[] = [
   {
     id: 'no-verify',
     label: 'C · 无自我验证',
-    toolFilter: ['list_files', 'read_file', 'write_file', 'search_code', 'run_command', 'git_operation'],
+    toolFilter: without('run_tests'),
     note: '移除 run_tests，Agent 改完无法自己跑测试确认',
   },
   {
+    id: 'no-grep',
+    label: 'D · 无文本检索（grep）',
+    toolFilter: without('grep'),
+    note: '移除 grep，保留 AST 与向量语义检索',
+  },
+  {
+    id: 'no-ast',
+    label: 'E · 无 AST/语义检索',
+    toolFilter: without('search_ast', 'search_semantic'),
+    note: '移除结构化检索与向量检索，只剩 grep 文本匹配',
+  },
+  {
     id: 'no-search',
-    label: 'D · 无代码检索',
-    toolFilter: ['list_files', 'read_file', 'write_file', 'run_command', 'run_tests', 'git_operation'],
-    note: '移除 search_code，只能靠 list_files + read_file 逐个看',
+    label: 'F · 无任何检索',
+    toolFilter: without('grep', 'search_ast', 'search_semantic'),
+    note: '三种检索全去掉，只能靠 list_files + read_file 逐个看',
   },
   {
     id: 'no-compress',
-    label: 'E · 无上下文压缩',
+    label: 'G · 无上下文压缩',
     useCompression: false,
     note: '关闭 token 预算与历史压缩',
   },
@@ -54,7 +72,7 @@ export const ABLATION_CONFIGS: AgentRunConfig[] = [
 /** 裸模型组：无工具、单次调用、直接输出完整文件 */
 export const BARE_CONFIG: AgentRunConfig = {
   id: 'bare',
-  label: 'F · 裸模型（无工具·单次输出）',
+  label: 'H · 裸模型（无工具·单次输出）',
   note: '同模型一次性输出全部文件内容，无工具调用、无迭代、无自验证',
 }
 
@@ -114,7 +132,7 @@ export interface BareResult {
 
 export async function runBareOnce(task: EvalTask): Promise<BareResult> {
   const sid = `bare-${newRunId()}-${task.id}`
-  createWorkspace(sid, task.template === 'holdout' ? HOLDOUT_TEMPLATE_DIR : undefined)
+  createWorkspace(sid, templateDir(task.template))
   const files = readWorkspaceFiles(sid)
   const t0 = Date.now()
   const prompt = [
@@ -133,7 +151,9 @@ export async function runBareOnce(task: EvalTask): Promise<BareResult> {
       { role: 'user', content: prompt },
     ])
     text = res.content
-    tokensUsed = res.usage?.total_tokens ?? Math.ceil((prompt.length + text.length) / 2)
+    tokensUsed = res.usage
+      ? (res.usage.prompt_tokens ?? 0) + (res.usage.completion_tokens ?? 0)
+      : Math.ceil((prompt.length + text.length) / 2)
   } catch (e) {
     text = ''
     tokensUsed = 0
@@ -203,7 +223,7 @@ function summarize(config: AgentRunConfig, report: EvalRunResult): ConfigSummary
 
 export async function runAblation(opts: {
   taskIds?: string[]
-  only?: 'default' | 'holdout' | 'all'
+  only?: 'default' | 'holdout' | 'hard' | 'all'
   configIds?: string[]
   repeat?: number
   includeBare?: boolean
@@ -215,10 +235,14 @@ export async function runAblation(opts: {
   const summaries: ConfigSummary[] = []
 
   const pool: EvalTask[] =
-    opts.only === 'holdout' ? HOLDOUT_TASKS : opts.only === 'default' ? EVAL_TASKS : [...EVAL_TASKS, ...HOLDOUT_TASKS]
-  const tasks = opts.taskIds?.length
-    ? [...EVAL_TASKS, ...HOLDOUT_TASKS].filter((t) => opts.taskIds!.includes(t.id))
-    : pool
+    opts.only === 'holdout'
+      ? HOLDOUT_TASKS
+      : opts.only === 'hard'
+        ? HARD_TASKS
+        : opts.only === 'default'
+          ? EVAL_TASKS
+          : ALL_TASKS
+  const tasks = opts.taskIds?.length ? ALL_TASKS.filter((t) => opts.taskIds!.includes(t.id)) : pool
 
   for (const config of configs) {
     opts.onProgress?.(`▶ ${config.label}（${config.note}）`)

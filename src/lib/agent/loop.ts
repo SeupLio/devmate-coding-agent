@@ -7,15 +7,17 @@
  * 实时消费，保证 token 级流式输出与工具调用事件在同一事件流中交织输出。
  */
 import { chatStream, estimateTokens, type ChatMessageParam } from './llm'
-import { TOOLS, executeTool, filterTools } from './tools'
+import { executeTool, filterTools, normalizeTodos, type TodoItem } from './tools'
 import { compressContext } from './context'
 import { AGENT_SYSTEM_PROMPT, PLAN_SYSTEM_PROMPT } from './prompts'
+import { readProjectMemory } from './workspace'
 
 export type AgentEvent =
   | { type: 'plan'; steps: string[] }
   | { type: 'token'; text: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: string; ok: boolean }
+  | { type: 'todos'; todos: TodoItem[] }
   | { type: 'context'; tokensBefore: number; tokensAfter: number; compressedCount: number }
   | { type: 'step_start'; step: number }
   | { type: 'final'; summary: string; stats: AgentStats }
@@ -96,6 +98,16 @@ function safeJsonParse(s: string): Record<string, unknown> {
   }
 }
 
+/**
+ * 组装系统提示词：基础提示 + 沙箱内的项目记忆（DEVmate.md，对标 CLAUDE.md）。
+ * 项目记忆让 Agent 知道这个仓库的约定（命令、风格、注意事项），无需每次重述。
+ */
+function buildSystemPrompt(sessionId: string): string {
+  const memory = readProjectMemory(sessionId)
+  if (!memory) return AGENT_SYSTEM_PROMPT
+  return `${AGENT_SYSTEM_PROMPT}\n\n## 项目说明（来自 DEVmate.md，请优先遵循）\n${memory}`
+}
+
 export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEvent> {
   const queue = new EventQueue<AgentEvent>()
 
@@ -109,7 +121,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     const useCompression = opts.useCompression !== false
 
     const messages: ChatMessageParam[] = [
-      { role: 'system', content: AGENT_SYSTEM_PROMPT },
+      { role: 'system', content: buildSystemPrompt(sessionId) },
       ...(opts.history ?? []),
       { role: 'user', content: task },
     ]
@@ -176,6 +188,11 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
           const args = safeJsonParse(tc.function.arguments)
           queue.push({ type: 'tool_call', id: tc.id, name: tc.function.name, args })
           stats.toolCalls++
+          // todo_write 额外发一个结构化事件，供前端渲染任务清单
+          if (tc.function.name === 'todo_write') {
+            const norm = normalizeTodos(args.todos)
+            if (norm.ok) queue.push({ type: 'todos', todos: norm.todos })
+          }
           let result: string
           let ok = true
           try {

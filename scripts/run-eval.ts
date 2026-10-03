@@ -9,10 +9,11 @@
  *   bun scripts/run-eval.ts --repeat 3      # 每任务重复 3 轮（观察方差）
  */
 import { runEvaluation } from '../src/lib/eval/runner'
+import { renderFailureSummary } from '../src/lib/eval/failure-modes'
 
 function parseArgs(argv: string[]) {
   const taskIds: string[] = []
-  let only: 'default' | 'holdout' | 'all' = 'all'
+  let only: 'default' | 'holdout' | 'hard' | 'all' = 'all'
   let repeat = 1
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -35,6 +36,11 @@ async function main() {
       for (const a of r.assertionResults) {
         console.log(`    ${a.passed ? '✓' : '✗'} ${a.name}`)
       }
+      if (!r.passed && r.diagnosis) {
+        console.log(`    ⚑ 失败模式：${r.diagnosis.label}`)
+        for (const e of r.diagnosis.evidence) console.log(`      · ${e}`)
+        console.log(`      → ${r.diagnosis.suggestion}`)
+      }
       if (r.stats) {
         console.log(`    [stats] ${r.stats.steps} 步 / ${r.stats.toolCalls} 次工具调用 / ${(r.stats.durationMs / 1000).toFixed(1)}s`)
       }
@@ -45,6 +51,8 @@ async function main() {
       console.log(`通过率：${rep.passRate}（${rep.passed}/${rep.total}）`)
       console.log(`平均步数：${rep.avgSteps}｜平均工具调用：${rep.avgToolCalls}｜平均耗时：${(rep.avgDurationMs / 1000).toFixed(1)}s`)
       console.log(`总用时：${(rep.durationMs / 1000).toFixed(0)}s`)
+      console.log('')
+      console.log(renderFailureSummary(rep.failureSummary))
       process.exit(rep.passed === rep.total ? 0 : 1)
     }
     if (ev.type === 'error') {

@@ -4,9 +4,17 @@
  * 支持传入「运行配置」（AgentRunConfig），用于对照实验（ablation）：
  * 同一批任务在不同配置下跑，比较通过率与资源消耗的差异。
  */
-import { runAgent, type AgentStats } from '@/lib/agent/loop'
-import { createWorkspace, newRunId, HOLDOUT_TEMPLATE_DIR } from '@/lib/agent/workspace'
-import { ALL_TASKS, EVAL_TASKS, HOLDOUT_TASKS, type EvalTask, type EvalTaskResult } from './tasks'
+import { runAgent, type AgentStats, type AgentEvent } from '@/lib/agent/loop'
+import { createWorkspace, newRunId, templateDir } from '@/lib/agent/workspace'
+import {
+  ALL_TASKS,
+  EVAL_TASKS,
+  HOLDOUT_TASKS,
+  HARD_TASKS,
+  type EvalTask,
+  type EvalTaskResult,
+} from './tasks'
+import { classifyFailure, collectSignals, summarizeFailures, type FailureDiagnosis, type FailureSummary } from './failure-modes'
 
 /** Agent 运行配置 —— 对照实验的自变量 */
 export interface AgentRunConfig {
@@ -35,22 +43,27 @@ export interface EvalRunResult {
   avgSteps: number
   avgToolCalls: number
   avgDurationMs: number
-  results: (EvalTaskResult & { stats?: AgentStats })[]
+  /** 失败模式分布（诊断用） */
+  failureSummary: FailureSummary
+  results: (EvalTaskResult & { stats?: AgentStats; diagnosis?: FailureDiagnosis })[]
 }
 
 export interface EvalProgress {
-  type: 'task_start' | 'task_done' | 'run_done' | 'error'
+  type: 'run_start' | 'task_start' | 'task_done' | 'run_done' | 'error'
+  /** run_start 时给出任务总数与清单，便于前端展示进度 */
+  total?: number
+  tasks?: { id: string; name: string }[]
   taskId?: string
   name?: string
-  result?: EvalTaskResult & { stats?: AgentStats }
+  result?: EvalTaskResult & { stats?: AgentStats; diagnosis?: FailureDiagnosis }
   report?: EvalRunResult
   message?: string
 }
 
 export interface RunEvaluationOptions {
   taskIds?: string[]
-  /** 只用 held-out 集 / 只用常规集 */
-  only?: 'default' | 'holdout' | 'all'
+  /** 只用 held-out 集 / 只用常规集 / 只用难任务集 */
+  only?: 'default' | 'holdout' | 'hard' | 'all'
   config?: AgentRunConfig
   /** 每个任务重复次数（用于观察 LLM 随机性带来的方差） */
   repeat?: number
@@ -61,6 +74,7 @@ function selectTasks(opts: RunEvaluationOptions): EvalTask[] {
   // 显式指定任务 ID 时以 ID 为准（可跨常规集与 held-out 集）
   if (opts.taskIds?.length) return ALL_TASKS.filter((t) => opts.taskIds!.includes(t.id))
   if (opts.only === 'holdout') return HOLDOUT_TASKS
+  if (opts.only === 'hard') return HARD_TASKS
   if (opts.only === 'default') return EVAL_TASKS
   return ALL_TASKS
 }
@@ -71,7 +85,10 @@ export async function* runEvaluation(opts: RunEvaluationOptions = {}): AsyncGene
   const runId = newRunId()
   const t0 = Date.now()
   const tasks = selectTasks(opts)
-  const results: (EvalTaskResult & { stats?: AgentStats })[] = []
+  const maxSteps = opts.maxSteps ?? 12
+  const results: (EvalTaskResult & { stats?: AgentStats; diagnosis?: FailureDiagnosis })[] = []
+
+  yield { type: 'run_start', total: tasks.length * repeat, tasks: tasks.map((t) => ({ id: t.id, name: t.name })) }
 
   for (let round = 1; round <= repeat; round++) {
     for (const task of tasks) {
@@ -81,19 +98,21 @@ export async function* runEvaluation(opts: RunEvaluationOptions = {}): AsyncGene
       // 任务间隔：降低限流风险
       await new Promise((r) => setTimeout(r, 2000))
       // 全新沙箱（按任务指定的模板）
-      createWorkspace(sessionId, task.template === 'holdout' ? HOLDOUT_TEMPLATE_DIR : undefined)
+      createWorkspace(sessionId, templateDir(task.template))
 
       let stats: AgentStats | undefined
       let agentError: string | null = null
+      const events: AgentEvent[] = []
       try {
         for await (const ev of runAgent({
           sessionId,
           task: task.prompt,
-          maxSteps: opts.maxSteps ?? 12,
+          maxSteps,
           plan: config.plan,
           toolFilter: config.toolFilter,
           useCompression: config.useCompression,
         })) {
+          events.push(ev)
           if (ev.type === 'final') stats = ev.stats
           if (ev.type === 'error') agentError = ev.message
         }
@@ -112,7 +131,7 @@ export async function* runEvaluation(opts: RunEvaluationOptions = {}): AsyncGene
         assertionResults.push({ name: a.name, passed })
       }
       const passed = assertionResults.length > 0 && assertionResults.every((a) => a.passed)
-      const result: EvalTaskResult & { stats?: AgentStats } = {
+      const result: EvalTaskResult & { stats?: AgentStats; diagnosis?: FailureDiagnosis } = {
         taskId: task.id,
         name,
         passed,
@@ -133,6 +152,12 @@ export async function* runEvaluation(opts: RunEvaluationOptions = {}): AsyncGene
           })
         }
       }
+
+      // ===== 失败模式分类 =====
+      const signals = collectSignals(events, maxSteps, stats)
+      if (agentError && !signals.apiError) signals.apiError = agentError
+      result.diagnosis = classifyFailure(signals, result.assertionResults, result.passed)
+
       results.push(result)
       yield { type: 'task_done', result }
     }
@@ -152,6 +177,11 @@ export async function* runEvaluation(opts: RunEvaluationOptions = {}): AsyncGene
     avgSteps: Number(avg((s) => s.steps).toFixed(1)),
     avgToolCalls: Number(avg((s) => s.toolCalls).toFixed(1)),
     avgDurationMs: Math.round(avg((s) => s.durationMs)),
+    failureSummary: summarizeFailures(
+      results
+        .filter((r): r is typeof r & { diagnosis: FailureDiagnosis } => Boolean(r.diagnosis))
+        .map((r) => ({ passed: r.passed, diagnosis: r.diagnosis })),
+    ),
     results,
   }
   yield { type: 'run_done', report }

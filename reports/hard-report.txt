@@ -1,0 +1,23 @@
+================================================================================
+DevMate 难任务集评测报告
+开始：2026-10-03T12:44:37.550Z｜用时：337s
+================================================================================
+通过率：67%（2/3）
+平均步数：12｜平均工具调用：21｜平均耗时：147.5s
+
+失败模式分布（共 3 个任务，通过 2，失败 1）：
+  模型/接口异常　　　　　　　　　  1 ████████████████████
+
+逐任务明细：
+  ✗ [难] 修复运算符优先级与一元负号（跨文件定位）
+      ✗ precedence 分组测试通过
+      ✓ 测试文件未被删改（防作弊）
+      ✗ Agent 异常：The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()
+      ⚑ 模型/接口异常：Agent 事件流报错：The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetc
+  ✓ [难] 实现变量赋值与多语句（跨 3 文件长链路）
+      ✓ variables 分组测试通过
+      ✓ 测试文件未被删改（防作弊）
+  ✓ [难] 生成期望值并修正取模语义（必须依赖环境反馈）
+      ✓ expected.json 等于参考实现真值（防作弊）
+      ✓ golden 分组测试通过
+      ✓ 测试文件未被删改（防作弊）

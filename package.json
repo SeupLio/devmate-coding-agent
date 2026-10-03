@@ -8,8 +8,10 @@
     "start": "next start -p 3000",
     "lint": "eslint .",
     "test": "bun test tests/agent.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "eval": "bun scripts/run-eval.ts",
     "eval:holdout": "bun scripts/run-eval.ts --only holdout",
+    "eval:hard": "bun scripts/run-hard.ts",
     "ablation": "bun scripts/run-ablation.ts",
     "sensitivity": "bun scripts/check-sensitivity.ts",
     "db:push": "prisma db push --accept-data-loss",
@@ -79,6 +81,7 @@
     "sonner": "^2.0.6",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5",
     "uuid": "^11.1.0",
     "vaul": "^1.1.2",
     "z-ai-web-dev-sdk": "^0.0.18",
@@ -93,8 +96,7 @@
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
-    "tw-animate-css": "^1.3.5",
-    "typescript": "^5"
+    "tw-animate-css": "^1.3.5"
   },
   "description": "DevMate — a full-stack browser-based Coding Agent: task planning, tool calling (files/search/terminal/git/tests), streaming output, context compression, and a built-in eval suite."
 }

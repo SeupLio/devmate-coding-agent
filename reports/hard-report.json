@@ -1,0 +1,112 @@
+{
+  "runId": "d4ecf871",
+  "startedAt": "2026-10-03T12:44:37.550Z",
+  "durationMs": 337249,
+  "total": 3,
+  "passed": 2,
+  "passRate": "67%",
+  "avgSteps": 12,
+  "avgToolCalls": 21,
+  "avgDurationMs": 147487,
+  "failureSummary": {
+    "total": 3,
+    "passed": 2,
+    "failed": 1,
+    "byMode": [
+      {
+        "mode": "api_error",
+        "label": "模型/接口异常",
+        "count": 1
+      }
+    ]
+  },
+  "results": [
+    {
+      "taskId": "hard-precedence",
+      "name": "[难] 修复运算符优先级与一元负号（跨文件定位）",
+      "passed": false,
+      "assertionResults": [
+        {
+          "name": "precedence 分组测试通过",
+          "passed": false
+        },
+        {
+          "name": "测试文件未被删改（防作弊）",
+          "passed": true
+        },
+        {
+          "name": "Agent 异常：The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()",
+          "passed": false
+        }
+      ],
+      "diagnosis": {
+        "mode": "api_error",
+        "label": "模型/接口异常",
+        "suggestion": "属基础设施问题，非 Agent 能力问题；重跑或检查网关限流。",
+        "evidence": [
+          "Agent 事件流报错：The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetc"
+        ]
+      }
+    },
+    {
+      "taskId": "hard-variables",
+      "name": "[难] 实现变量赋值与多语句（跨 3 文件长链路）",
+      "passed": true,
+      "assertionResults": [
+        {
+          "name": "variables 分组测试通过",
+          "passed": true
+        },
+        {
+          "name": "测试文件未被删改（防作弊）",
+          "passed": true
+        }
+      ],
+      "stats": {
+        "steps": 12,
+        "toolCalls": 21,
+        "tokensUsed": 112498,
+        "durationMs": 187662,
+        "finished": true
+      },
+      "diagnosis": {
+        "mode": "passed",
+        "label": "通过",
+        "suggestion": "无需处理。",
+        "evidence": []
+      }
+    },
+    {
+      "taskId": "hard-golden",
+      "name": "[难] 生成期望值并修正取模语义（必须依赖环境反馈）",
+      "passed": true,
+      "assertionResults": [
+        {
+          "name": "expected.json 等于参考实现真值（防作弊）",
+          "passed": true
+        },
+        {
+          "name": "golden 分组测试通过",
+          "passed": true
+        },
+        {
+          "name": "测试文件未被删改（防作弊）",
+          "passed": true
+        }
+      ],
+      "stats": {
+        "steps": 12,
+        "toolCalls": 21,
+        "tokensUsed": 104897,
+        "durationMs": 107311,
+        "finished": true
+      },
+      "diagnosis": {
+        "mode": "passed",
+        "label": "通过",
+        "suggestion": "无需处理。",
+        "evidence": []
+      }
+    }
+  ]
+}
