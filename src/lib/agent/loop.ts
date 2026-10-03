@@ -14,6 +14,7 @@ import { readProjectMemory } from './workspace'
 
 export type AgentEvent =
   | { type: 'plan'; steps: string[] }
+  | { type: 'reasoning'; text: string }
   | { type: 'token'; text: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: string; ok: boolean }
@@ -36,7 +37,18 @@ export interface RunAgentOptions {
   task: string
   history?: ChatMessageParam[]
   maxSteps?: number
-  plan?: boolean
+  /**
+   * 是否生成任务规划：
+   *  - true（默认）：始终规划（评测用，行为确定）
+   *  - false：跳过
+   *  - 'auto'：短任务跳过（前端默认，省一次完整 LLM 往返，显著变快）
+   */
+  plan?: boolean | 'auto'
+  /**
+   * 是否允许模型深度思考（false 时请求体带 enable_thinking=false，显著更快）。
+   * 默认 true（由环境变量 OPENAI_ENABLE_THINKING 兜底）。
+   */
+  thinking?: boolean
   // ===== 以下开关用于对照实验（ablation），默认全部开启 =====
   /** 是否启用上下文压缩 */
   useCompression?: boolean
@@ -108,6 +120,19 @@ function buildSystemPrompt(sessionId: string): string {
   return `${AGENT_SYSTEM_PROMPT}\n\n## 项目说明（来自 DEVmate.md，请优先遵循）\n${memory}`
 }
 
+/**
+ * 判断任务是否值得单独跑一次规划。
+ *
+ * 规划是一次**完整的 LLM 往返**；对「重构 X 为 Y」这类短任务，
+ * 规划几乎不产生新信息，却让用户多等一整个回合 —— 所以 auto 模式下跳过。
+ */
+export function needsPlan(task: string): boolean {
+  const t = task.trim()
+  if (t.length >= 50) return true
+  // 真正的「多要求」信号（「然后提交」这类收尾语不算）
+  return /[；;]|并且|同时|分别|依次|以及|所有|多个|逐个/.test(t)
+}
+
 export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEvent> {
   const queue = new EventQueue<AgentEvent>()
 
@@ -119,6 +144,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     // 对照实验用：按需裁剪可用工具集（默认全部 7 个）
     const activeTools = filterTools(opts.toolFilter)
     const useCompression = opts.useCompression !== false
+    const chatOpts = { enableThinking: opts.thinking }
 
     const messages: ChatMessageParam[] = [
       { role: 'system', content: buildSystemPrompt(sessionId) },
@@ -128,11 +154,19 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
 
     try {
       // ===== 阶段 1：任务规划（结构化输出）=====
-      if (opts.plan !== false) {
-        const planRes = await chatStream([
-          { role: 'system', content: PLAN_SYSTEM_PROMPT },
-          { role: 'user', content: task },
-        ])
+      // 规划是一次完整 LLM 往返，简单任务跳过可显著降低首屏等待。
+      const wantPlan = opts.plan === 'auto' ? needsPlan(task) : opts.plan !== false
+      if (wantPlan) {
+        // 规划阶段的思考过程也流式推出去，避免「静默空等」
+        const planRes = await chatStream(
+          [
+            { role: 'system', content: PLAN_SYSTEM_PROMPT },
+            { role: 'user', content: task },
+          ],
+          undefined,
+          { onReasoning: (text) => queue.push({ type: 'reasoning', text }) },
+          chatOpts,
+        )
         stats.tokensUsed += estimateTokens(planRes.content)
         const parsed = extractJson(planRes.content)
         const steps = Array.isArray((parsed as { steps?: unknown })?.steps)
@@ -163,7 +197,8 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
         // token 实时流式推入队列（与工具事件交织）
         const res = await chatStream(messages, activeTools.length ? activeTools : undefined, {
           onToken: (text) => queue.push({ type: 'token', text }),
-        })
+          onReasoning: (text) => queue.push({ type: 'reasoning', text }),
+        }, chatOpts)
         stats.tokensUsed += estimateTokens(
           messages.map((m) => m.content ?? '').join('') + res.content,
         )
@@ -210,7 +245,8 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       messages.push({ role: 'user', content: '已达最大步数限制，请基于已有信息直接给出最终总结。' })
       const finalRes = await chatStream(messages, undefined, {
         onToken: (text) => queue.push({ type: 'token', text }),
-      })
+        onReasoning: (text) => queue.push({ type: 'reasoning', text }),
+      }, chatOpts)
       stats.finished = true
       stats.durationMs = Date.now() - t0
       queue.push({ type: 'final', summary: finalRes.content, stats })

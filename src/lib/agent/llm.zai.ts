@@ -20,10 +20,19 @@ export interface ToolCall {
 
 export interface StreamCallbacks {
   onToken?: (text: string) => void
+  /** 推理模型的思考过程增量（该 SDK 路径暂不产出，仅为类型对齐） */
+  onReasoning?: (text: string) => void
+}
+
+/** 与 llm.openai.ts 对齐（该 SDK 路径暂不支持关闭思考） */
+export interface ChatOptions {
+  enableThinking?: boolean
 }
 
 export interface StreamResult {
   content: string
+  /** 推理内容（该 SDK 路径暂不解析） */
+  reasoning: string
   toolCalls: ToolCall[]
   finishReason: string | null
   usage?: { prompt_tokens?: number; completion_tokens?: number }
@@ -56,6 +65,7 @@ export async function chatStream(
   messages: ChatMessageParam[],
   tools?: unknown[],
   cb?: StreamCallbacks,
+  _opts?: ChatOptions,
 ): Promise<StreamResult> {
   const zai = await getClient()
   const body: Record<string, unknown> = { messages, stream: true }
@@ -121,6 +131,7 @@ export async function chatStream(
       }
       return {
         content,
+        reasoning: '', // 该 SDK 路径暂不解析思考内容
         toolCalls: [...toolAcc.values()].filter((t) => t.function.name),
         finishReason,
         usage,

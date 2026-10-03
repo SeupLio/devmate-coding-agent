@@ -15,6 +15,7 @@ export interface TodoItemUI {
 export type SSEEvent =
   | { type: 'plan'; steps: string[] }
   | { type: 'step_start'; step: number }
+  | { type: 'reasoning'; text: string }
   | { type: 'token'; text: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: string; ok: boolean }
@@ -34,7 +35,7 @@ export interface UIToolCall {
 
 export interface UIMessage {
   id: string
-  kind: 'user' | 'assistant' | 'tool' | 'plan' | 'error' | 'context'
+  kind: 'user' | 'assistant' | 'tool' | 'plan' | 'reasoning' | 'error' | 'context'
   text?: string
   tool?: UIToolCall
   steps?: string[]

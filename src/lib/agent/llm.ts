@@ -13,4 +13,4 @@ const impl = provider === 'zai' ? zai : openai
 
 export const chatStream = impl.chatStream
 export const estimateTokens = impl.estimateTokens
-export type { ChatMessageParam, StreamCallbacks, StreamResult, ToolCall } from './llm.openai'
+export type { ChatMessageParam, ChatOptions, StreamCallbacks, StreamResult, ToolCall } from './llm.openai'

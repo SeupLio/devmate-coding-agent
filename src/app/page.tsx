@@ -12,7 +12,7 @@ import { ToolCallCard } from '@/components/agent/ToolCallCard'
 import { WorkspacePanel } from '@/components/agent/WorkspacePanel'
 import { EvalPanel } from '@/components/agent/EvalPanel'
 import type { AgentStats, SessionInfo, SSEEvent, TodoItemUI, UIMessage } from '@/components/agent/types'
-import { Bot, GitBranch, ListChecks, Plus, Send, Sparkles, Square, User } from 'lucide-react'
+import { Bot, Brain, GitBranch, ListChecks, Plus, Send, Sparkles, Square, User, Zap } from 'lucide-react'
 
 const QUICK_TASKS = [
   '修复 mathutils.js 中的 bug，使全部测试通过并提交',
@@ -28,6 +28,11 @@ export default function Home() {
   const [running, setRunning] = useState(false)
   const [stats, setStats] = useState<AgentStats | null>(null)
   const [todos, setTodos] = useState<TodoItemUI[]>([])
+  const [showReasoning, setShowReasoning] = useState(true)
+  const [planMode, setPlanMode] = useState<'auto' | 'on' | 'off'>('auto')
+  const [deepThinking, setDeepThinking] = useState(true)
+  /** 当前是否处于一段连续的「思考」中（用于把同一次思考合并成一个块） */
+  const reasoningOpenRef = useRef(false)
   const [fileRefreshKey, setFileRefreshKey] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -107,6 +112,7 @@ export default function Home() {
     setTask('')
     setRunning(true)
     setTodos([])
+    reasoningOpenRef.current = false
     setMessages((ms) => [...ms, { id: `u${Date.now()}`, kind: 'user', text }])
 
     const controller = new AbortController()
@@ -115,7 +121,12 @@ export default function Home() {
       const res = await fetch('/api/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: sid, task: text }),
+        body: JSON.stringify({
+          sessionId: sid,
+          task: text,
+          plan: planMode === 'on' ? true : planMode === 'off' ? false : 'auto',
+          thinking: deepThinking,
+        }),
         signal: controller.signal,
       })
       const reader = res.body?.getReader()
@@ -157,10 +168,23 @@ export default function Home() {
     function applyEvent(ev: SSEEvent) {
       const now = Date.now()
       switch (ev.type) {
+        case 'reasoning':
+          // 同一次思考的增量合并到一个块里；遇到正文/工具调用就断开
+          setMessages((ms) => {
+            const last = ms[ms.length - 1]
+            if (reasoningOpenRef.current && last?.kind === 'reasoning') {
+              return [...ms.slice(0, -1), { ...last, text: (last.text ?? '') + ev.text }]
+            }
+            reasoningOpenRef.current = true
+            return [...ms, { id: `r${now}`, kind: 'reasoning', text: ev.text }]
+          })
+          break
         case 'plan':
+          reasoningOpenRef.current = false
           setMessages((ms) => [...ms, { id: `p${now}`, kind: 'plan', steps: ev.steps }])
           break
         case 'token':
+          reasoningOpenRef.current = false
           setMessages((ms) => {
             const last = ms[ms.length - 1]
             if (last?.kind === 'assistant') {
@@ -170,6 +194,7 @@ export default function Home() {
           })
           break
         case 'tool_call':
+          reasoningOpenRef.current = false
           setMessages((ms) => [
             ...ms,
             { id: `t${now}`, kind: 'tool', tool: { id: ev.id, name: ev.name, args: ev.args, status: 'running' } },
@@ -274,9 +299,11 @@ export default function Home() {
             {todos.length > 0 && <TodoPanel todos={todos} />}
             {messages.length === 0 && <EmptyState onPick={(t) => setTask(t)} />}
             <div className="space-y-3">
-              {messages.map((m) => (
-                <MessageRow key={m.id} message={m} />
-              ))}
+              {messages
+                .filter((m) => showReasoning || m.kind !== 'reasoning')
+                .map((m) => (
+                  <MessageRow key={m.id} message={m} />
+                ))}
               {running && !messages.some((m) => m.kind === 'tool' && m.tool?.status === 'running') && (
                 <p className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Sparkles className="h-3.5 w-3.5 animate-pulse text-emerald-600" /> Agent 思考中…
@@ -297,6 +324,53 @@ export default function Home() {
               rows={2}
               disabled={running}
             />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setDeepThinking((v) => !v)}
+                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
+                  deepThinking
+                    ? 'border-amber-300 bg-amber-50 text-amber-700'
+                    : 'border-muted text-muted-foreground'
+                }`}
+                title="关闭后请求带 enable_thinking=false，响应约快 2×；复杂任务准确率可能下降"
+              >
+                <Zap className="h-3 w-3" />
+                {deepThinking ? '深度思考' : '快速模式'}
+              </button>
+              <button
+                onClick={() => setShowReasoning((v) => !v)}
+                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
+                  showReasoning
+                    ? 'border-violet-300 bg-violet-50 text-violet-700'
+                    : 'border-muted text-muted-foreground'
+                }`}
+                title="是否展示模型的思考过程"
+              >
+                <Brain className="h-3 w-3" />
+                {showReasoning ? '显示思考' : '隐藏思考'}
+              </button>
+              <span className="text-[10px] text-muted-foreground">任务规划</span>
+              <div className="flex overflow-hidden rounded-full border">
+                {(
+                  [
+                    ['auto', '自动'],
+                    ['on', '开'],
+                    ['off', '关'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setPlanMode(k)}
+                    className={`px-2 py-0.5 text-[10px] ${
+                      planMode === k ? 'bg-emerald-600 text-white' : 'text-muted-foreground'
+                    }`}
+                    title={k === 'auto' ? '短任务自动跳过规划（更快）' : k === 'on' ? '总是先规划' : '从不规划'}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex items-center justify-between">
               <p className="text-[10px] text-muted-foreground">
                 Agent 将在独立沙箱内读写文件、执行命令、跑测试并提交 Git
@@ -420,6 +494,20 @@ function MessageRow({ message }: { message: UIMessage }) {
           {message.text}
         </div>
       </div>
+    )
+  }
+  if (message.kind === 'reasoning') {
+    return (
+      <details className="rounded-md border border-dashed bg-muted/30 px-3 py-1.5">
+        <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Brain className="h-3.5 w-3.5 text-violet-500" />
+          思考过程
+          <span className="text-[10px] opacity-60">（点击展开/收起）</span>
+        </summary>
+        <div className="mt-1.5 max-h-72 overflow-auto whitespace-pre-wrap break-words border-t pt-1.5 font-mono text-[11px] leading-relaxed text-muted-foreground">
+          {message.text}
+        </div>
+      </details>
     )
   }
   if (message.kind === 'tool' && message.tool) {

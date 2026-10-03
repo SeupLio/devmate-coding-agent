@@ -24,6 +24,7 @@ import {
   grepWorkspace,
   type AstKind,
 } from './search'
+import { buildDocx, buildPptx, parseDocxSpec, parsePptxSpec } from './docgen'
 
 export interface ToolDef {
   type: 'function'
@@ -320,6 +321,81 @@ export const TOOLS: ToolDef[] = [
   {
     type: 'function',
     function: {
+      name: 'generate_docx',
+      description:
+        '生成 Word 文档（.docx）并写入工作区。用于产出报告、方案、说明书等**交付物**。'
+        + 'spec 结构：{ title?, subtitle?, sections: [{ heading?, paragraphs?: string[], bullets?: string[] }] }',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '输出文件相对路径，如 docs/方案.docx' },
+          spec: {
+            type: 'object',
+            description: '文档结构',
+            properties: {
+              title: { type: 'string', description: '文档标题' },
+              subtitle: { type: 'string', description: '副标题' },
+              sections: {
+                type: 'array',
+                description: '章节列表',
+                items: {
+                  type: 'object',
+                  properties: {
+                    heading: { type: 'string', description: '章节标题' },
+                    paragraphs: { type: 'array', items: { type: 'string' }, description: '正文段落' },
+                    bullets: { type: 'array', items: { type: 'string' }, description: '项目符号条目' },
+                  },
+                },
+              },
+            },
+            required: ['sections'],
+          },
+        },
+        required: ['path', 'spec'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_pptx',
+      description:
+        '生成 PowerPoint 演示文稿（.pptx）并写入工作区，用于产出汇报 / 讲解材料。'
+        + 'spec 结构：{ title?, subtitle?, slides: [{ title, bullets?: string[], notes? }] }（会额外生成封面页）',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '输出文件相对路径，如 docs/汇报.pptx' },
+          spec: {
+            type: 'object',
+            description: '演示文稿结构',
+            properties: {
+              title: { type: 'string', description: '封面标题' },
+              subtitle: { type: 'string', description: '封面副标题' },
+              slides: {
+                type: 'array',
+                description: '内容页列表',
+                items: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string', description: '页面标题' },
+                    bullets: { type: 'array', items: { type: 'string' }, description: '要点' },
+                    notes: { type: 'string', description: '演讲者备注' },
+                  },
+                  required: ['title'],
+                },
+              },
+            },
+            required: ['slides'],
+          },
+        },
+        required: ['path', 'spec'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'todo_write',
       description:
         '维护结构化任务清单。任务多于 2-3 步、或用户给了多项要求时使用。'
@@ -528,6 +604,37 @@ export async function executeTool(
         return code === 0 ? `提交成功：${truncate(stdout)}` : `提交失败（可能无改动）：${truncate(stderr)}`
       }
       return `错误：未知 git 操作 ${action}`
+    }
+    case 'generate_docx': {
+      const parsed = parseDocxSpec(args.spec)
+      if (!parsed.ok) return `错误：${parsed.error}`
+      const rel = String(args.path ?? '')
+      if (!/\.docx$/i.test(rel)) return '错误：path 需以 .docx 结尾'
+      const p = safeResolve(ctx.sessionId, rel)
+      fs.mkdirSync(path.dirname(p), { recursive: true })
+      try {
+        const buf = await buildDocx(parsed.value!)
+        fs.writeFileSync(p, buf)
+        const secs = parsed.value!.sections?.length ?? 0
+        return `已生成 Word 文档 ${rel}（${buf.length} 字节，${secs} 个章节）。可在工作区面板下载打开。`
+      } catch (e) {
+        return `生成 docx 失败：${e instanceof Error ? e.message : String(e)}`
+      }
+    }
+    case 'generate_pptx': {
+      const parsed = parsePptxSpec(args.spec)
+      if (!parsed.ok) return `错误：${parsed.error}`
+      const rel = String(args.path ?? '')
+      if (!/\.pptx$/i.test(rel)) return '错误：path 需以 .pptx 结尾'
+      const p = safeResolve(ctx.sessionId, rel)
+      fs.mkdirSync(path.dirname(p), { recursive: true })
+      try {
+        const buf = await buildPptx(parsed.value!)
+        fs.writeFileSync(p, buf)
+        return `已生成 PPT ${rel}（${buf.length} 字节，${parsed.value!.slides.length} 页内容 + 封面）。可在工作区面板下载打开。`
+      } catch (e) {
+        return `生成 pptx 失败：${e instanceof Error ? e.message : String(e)}`
+      }
     }
     case 'todo_write': {
       const norm = normalizeTodos(args.todos)

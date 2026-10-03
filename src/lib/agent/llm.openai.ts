@@ -27,10 +27,24 @@ export interface ToolCall {
 
 export interface StreamCallbacks {
   onToken?: (text: string) => void
+  /** 推理模型（Qwen / DeepSeek-R1 等）的思考过程增量 */
+  onReasoning?: (text: string) => void
+}
+
+export interface ChatOptions {
+  /**
+   * 是否允许模型「深度思考」。
+   *  - true（默认）：思考过程会流式输出（更准，但更慢）
+   *  - false：请求体带 enable_thinking=false，**显著变快**（实测约 2×）
+   * 若网关不支持该字段，可用 OPENAI_EXTRA_BODY 覆盖。
+   */
+  enableThinking?: boolean
 }
 
 export interface StreamResult {
   content: string
+  /** 推理内容（思考过程），可能为空 */
+  reasoning: string
   toolCalls: ToolCall[]
   finishReason: string | null
   usage?: { prompt_tokens?: number; completion_tokens?: number }
@@ -70,6 +84,7 @@ export async function chatStream(
   messages: ChatMessageParam[],
   tools?: unknown[],
   cb?: StreamCallbacks,
+  opts?: ChatOptions,
 ): Promise<StreamResult> {
   const base = process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1'
   const key = process.env.OPENAI_API_KEY ?? ''
@@ -89,6 +104,20 @@ export async function chatStream(
   if (tools && tools.length) {
     body.tools = tools
     body.tool_choice = 'auto'
+  }
+  // 关闭深度思考 → 显著更快（环境变量可作为全局默认）
+  const thinking =
+    opts?.enableThinking ?? (process.env.OPENAI_ENABLE_THINKING ?? 'true').toLowerCase() !== 'false'
+  if (!thinking) body.enable_thinking = false
+  // 逃生口：把额外字段并入请求体（优先级最高）。
+  // 例：OPENAI_EXTRA_BODY={"enable_thinking":false}
+  //     OPENAI_EXTRA_BODY={"reasoning_effort":"low"}
+  if (process.env.OPENAI_EXTRA_BODY) {
+    try {
+      Object.assign(body, JSON.parse(process.env.OPENAI_EXTRA_BODY))
+    } catch {
+      /* 配置非法则忽略，不影响主流程 */
+    }
   }
 
   const MAX_RETRIES = 5
@@ -113,6 +142,7 @@ export async function chatStream(
       const dec = new TextDecoder()
       let buf = ''
       let content = ''
+      let reasoning = ''
       let finishReason: string | null = null
       let usage: StreamResult['usage']
       const toolAcc = new Map<number, ToolCall>()
@@ -140,6 +170,16 @@ export async function chatStream(
           if (choice.finish_reason) finishReason = choice.finish_reason
           const delta = choice.delta
           if (!delta) continue
+          // 推理内容：不同网关字段名不同（Qwen/DeepSeek 用 reasoning_content，
+          // 也有用 reasoning 的），两个都取
+          const rDelta =
+            (typeof delta.reasoning_content === 'string' && delta.reasoning_content) ||
+            (typeof delta.reasoning === 'string' && delta.reasoning) ||
+            ''
+          if (rDelta) {
+            reasoning += rDelta
+            cb?.onReasoning?.(rDelta)
+          }
           if (typeof delta.content === 'string' && delta.content) {
             content += delta.content
             cb?.onToken?.(delta.content)
@@ -161,6 +201,7 @@ export async function chatStream(
       }
       return {
         content,
+        reasoning,
         toolCalls: [...toolAcc.values()].filter((t) => t.function.name),
         finishReason,
         usage,

@@ -1,7 +1,8 @@
 node_modules/
 .next/
 db/*.db
-workspace/
+# 只忽略仓库根目录的沙箱目录；不加前导斜杠会连 src/app/api/workspace/ 一起忽略
+/workspace/
 dev.log
 server.log
 *.log

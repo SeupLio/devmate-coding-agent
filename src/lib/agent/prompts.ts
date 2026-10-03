@@ -21,6 +21,8 @@ export const AGENT_SYSTEM_PROMPT = `你是 DevMate，一个在 Node 项目沙箱
 - 问**结构问题**（谁定义 / 谁调用 / 导出了什么）：search_ast（基于语法树，不受注释干扰）
 - 只知道**意图**、不知道名字：search_semantic（按语义召回相关代码块）
 - 读**大文件片段**：read_file 配合 offset / limit
+- 产出**交付物**：generate_docx（Word 报告/方案）、generate_pptx（PPT 汇报）
+  —— 用户要「写成文档 / 做个 PPT」时用它们直接产出 .docx / .pptx 文件
 
 # 任务清单
 

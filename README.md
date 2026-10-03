@@ -26,7 +26,10 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 |---|---|
 | 🧭 **任务规划** | 结构化输出（JSON steps）先生成 3-6 步计划，前端步骤清单可视化 |
 | ✏️ **精确编辑** | **`edit_file`**（唯一性校验的字符串替换）+ **`multi_edit`**（原子多处替换）—— 对标 Claude Code，不再整文件重写 |
-| 🔧 **工具调用** | 13 个沙箱工具：`list_files` / `read_file`(offset/limit) / **`edit_file`** / **`multi_edit`** / `write_file` / **`glob`** / **`grep`** / `search_ast` / `search_semantic` / `run_command` / `run_tests` / `git_operation` / **`todo_write`** |
+| 📄 **文档产出** | **`generate_docx`**（Word 报告/方案）+ **`generate_pptx`**（PPT 汇报）—— 直接产出真正的 .docx / .pptx 交付物，工作区可下载 |
+| 🔧 **工具调用** | 15 个沙箱工具：`list_files` / `read_file`(offset/limit) / `edit_file` / `multi_edit` / `write_file` / `glob` / `grep` / `search_ast` / `search_semantic` / `run_command` / `run_tests` / `git_operation` / `todo_write` / `generate_docx` / `generate_pptx` |
+| 🧠 **思考可视化** | 推理模型的思考过程**流式**输出为独立折叠块，可在界面**一键显示/隐藏**（默认显示，避免"卡住不动"的错觉） |
+| ⚡ **按需规划** | 规划是一次完整 LLM 往返；`auto` 模式下短任务自动跳过（「重构斐波那契为迭代」不再空等一整个回合），界面可切 自动/开/关 |
 | 🔎 **三层检索** | `glob` 找文件 · `grep` 找文本（输出模式/glob 过滤/上下文行） · **`search_ast`** 答结构问题（谁定义/谁调用） · **`search_semantic`** 按语义召回（TF-IDF 向量余弦） |
 | ✅ **任务清单** | **`todo_write`** 结构化清单 + 前端面板实时展示进度（对标 TodoWrite） |
 | 🧠 **项目记忆** | 沙箱内 **`DEVmate.md`** 自动注入系统提示（对标 `CLAUDE.md`），交代项目约定与常用命令 |
@@ -36,7 +39,7 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 📊 **效果评估** | 五层评测：单元测试 + 常规任务 + held-out 任务 + 难任务集（多文件/长链路/环境反馈）+ 对照实验 |
 | 🔬 **评测自检** | 变异测试攻击评测器本身：**11 个变异体**检出率 100%；发现并修复「删测试即可通过」「伪造期望值自洽」两类作弊盲区 |
 | 🩺 **失败诊断** | 失败模式分类：把「没通过」归类为 8 种可枚举模式（未改动 / 未验证 / 超步数 / 作弊 / API 异常 …），附证据与改进建议 |
-| 🧪 **工程质量** | 63 个单元测试覆盖沙箱安全 / 工具执行 / 检索 / 编辑 / 上下文压缩 / 防作弊 / 失败分类 / 评测灵敏度 |
+| 🧪 **工程质量** | 67 个单元测试覆盖沙箱安全 / 工具执行 / 检索 / 编辑 / 上下文压缩 / 防作弊 / 失败分类 / 评测灵敏度 |
 | 🔁 **限流韧性** | LLM 层指数退避重试（429/5xx），长评测链路不中断 |
 
 > ⚠️ **生产落地评估见 [docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)** ——
@@ -71,6 +74,30 @@ L4 评测灵敏度：基线全通过 + 变异体检出率 100%（11/11，bun scr
 
 端到端：规划 → 流式输出 → 工具调用 → 测试验证 → Git 提交，全链路验证通过
 ```
+
+### 延迟与速度（实测，含反直觉结论）
+
+用户反馈过「简单任务也要思考很久才出结果」。定位后发现两个真问题：
+
+1. **规划阶段是一次「静默的完整 LLM 调用」** —— 不流式、无回调，这期间界面一片空白；
+2. **推理模型的思考内容（`reasoning_content`）根本没被解析** —— 只读了 `delta.content`，
+   于是长思考期间前端完全空白，正文突然出现。**这才是「思考特别久」的真身。**
+
+修复后实测（任务：「重构斐波那契数列为迭代实现」）：
+
+| 模式 | 首屏延迟 | 总耗时 | 思考字数 |
+|---|---|---|---|
+| 深度思考 **开**（默认） | **1.4s** | 81.7s | 6441 |
+| 快速模式（`enable_thinking=false`） | 25.4s | **26.9s** | 0 |
+
+**反直觉但诚实**：关掉思考总耗时快约 **3×**，但**首屏反而更慢**（25.4s）——
+因为没有思考内容可流式，而首个工具调用要等整轮 LLM 结束才发出。
+换句话说：**开思考是「更快看到动静」，关思考是「更快拿到结果」**，两种诉求不同，
+所以做成了界面上一键切换，而不是替你选死。
+
+另外 `plan=auto`（短任务跳过规划）实测**并不必然更快**：单样本下
+auto 116s vs 强制规划 65s —— 因为缺了规划，Agent 的思考量翻倍（10233 vs 5208 字）。
+所以它只是**可选项**，真正解决「感觉慢」的是思考流式化。
 
 评测过程中的真实产物示例（Agent 自主完成，非人工修改）：
 
@@ -256,7 +283,7 @@ LLM_PROVIDER=zai
 命令行（不依赖界面）：
 
 ```bash
-bun test tests/agent.test.ts                 # L1 单元测试（63 条）
+bun test tests/agent.test.ts                 # L1 单元测试（67 条）
 bun scripts/run-agent.ts "修复 mathutils.js 的 bug 并提交"   # 单任务
 bun scripts/run-eval.ts --only default       # L2 常规评测集
 bun scripts/run-eval.ts --only holdout       # L2 held-out 评测集
@@ -272,7 +299,7 @@ bun scripts/check-sensitivity.ts             # L4 评测灵敏度（不需要 LL
 
 | 层 | 手段 | 回答什么问题 | 需要 LLM |
 |---|---|---|---|
-| L1 | **单元测试**（63 条） | 代码有没有坏？沙箱安全、工具、检索、压缩对不对？ | 否 |
+| L1 | **单元测试**（67 条） | 代码有没有坏？沙箱安全、工具、检索、压缩对不对？ | 否 |
 | L2 | **任务评测集**（4 常规 + 4 held-out + 3 难任务） | 端到端链路能不能跑通？能否泛化？跨文件任务行不行？ | 是 |
 | L3 | **对照实验**（7 组 + 裸模型） | 每个能力维度各自贡献多少？ | 是 |
 | L4 | **评测灵敏度**（11 变异体） | 评测本身是不是太松？ | **否** |
@@ -304,14 +331,15 @@ src/
     api/agent/route.ts        # Agent SSE 接口
     api/eval/route.ts         # 评测 SSE 接口
     api/sessions/...          # 会话 CRUD
-    api/workspace/[id]/...    # 文件树 / 文件内容
+    api/workspace/[id]/route.ts  # 工作区文件树 / 文本预览 / 二进制下载（docx、pptx）
   lib/agent/                   # Agent 核心
-    loop.ts                   # 执行循环（事件队列 + 并发泵 + 项目记忆注入）
-    tools.ts                  # 13 个沙箱工具（含 edit_file/multi_edit/glob/grep/todo_write）
+    loop.ts                   # 执行循环（事件队列 + 并发泵 + 项目记忆注入 + 按需规划）
+    tools.ts                  # 15 个沙箱工具（edit_file/multi_edit/glob/grep/todo/docx/pptx…）
     search.ts                 # AST 符号检索 + TF-IDF 向量语义检索 + glob + grep
+    docgen.ts                 # Word(.docx) / PPT(.pptx) 生成（docx + pptxgenjs）
     context.ts                # 上下文预算与压缩
     llm.ts                    # LLM provider 路由
-    llm.openai.ts             # OpenAI 兼容实现（流式 + 重试）
+    llm.openai.ts             # OpenAI 兼容实现（流式 + 思考内容 + 网络错误重试）
     llm.zai.ts                # 智谱内部 SDK 实现
     prompts.ts                # 系统提示词（工具使用纪律）
     workspace.ts              # 会话沙箱管理（独立 Git 仓库 + DEVmate.md 项目记忆）
@@ -322,7 +350,7 @@ src/
     sensitivity.ts            # 评测灵敏度检查（变异测试，11 变异体，不需要 LLM）
     failure-modes.ts          # 失败模式分类（信号 → 8 种模式 + 证据 + 建议）
   components/agent/            # ToolCallCard / WorkspacePanel / EvalPanel
-tests/agent.test.ts            # 63 个单元测试
+tests/agent.test.ts            # 67 个单元测试
 scripts/run-agent.ts           # CLI 单任务入口
 scripts/run-eval.ts            # CLI 评测入口（--only default|holdout|hard, --repeat N）
 scripts/run-hard.ts            # CLI 难任务集评测（含失败模式报告）

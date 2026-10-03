@@ -3,18 +3,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
-import { File, Folder, FolderOpen, RefreshCw } from 'lucide-react'
+import { Download, File, Folder, FolderOpen, RefreshCw } from 'lucide-react'
 
 interface FileNode {
   name: string
   path: string
   type: 'dir' | 'file'
+  size?: number
   children?: FileNode[]
 }
 
+/** 这些扩展名不做文本预览，改为提供下载（生成的 docx/pptx 等） */
+const BINARY_RE = /\.(docx?|pptx?|xlsx?|pdf|zip|gz|png|jpe?g|gif|webp|ico|woff2?|ttf|mp4)$/i
+
 export function WorkspacePanel({ sessionId, refreshKey }: { sessionId: string | null; refreshKey: number }) {
   const [tree, setTree] = useState<FileNode[]>([])
-  const [file, setFile] = useState<{ path: string; content: string } | null>(null)
+  const [file, setFile] = useState<{ path: string; content: string; binary?: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
 
   const loadTree = useCallback(async () => {
@@ -36,10 +40,17 @@ export function WorkspacePanel({ sessionId, refreshKey }: { sessionId: string | 
 
   const openFile = async (path: string) => {
     if (!sessionId) return
+    if (BINARY_RE.test(path)) {
+      setFile({ path, content: '', binary: true })
+      return
+    }
     const res = await fetch(`/api/workspace/${sessionId}?file=${encodeURIComponent(path)}`)
-    const data = await res.json()
-    if (data.content !== undefined) setFile({ path, content: data.content })
+    const data = await res.json().catch(() => ({}))
+    setFile({ path, content: data.content ?? `（无法预览：${data.error ?? res.status}）` })
   }
+
+  const downloadUrl = (path: string) =>
+    `/api/workspace/${sessionId}?file=${encodeURIComponent(path)}&download=1`
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -61,12 +72,27 @@ export function WorkspacePanel({ sessionId, refreshKey }: { sessionId: string | 
       <div className="min-h-0 flex-1 overflow-auto p-2">
         {file ? (
           <>
-            <Badge variant="outline" className="mb-1 font-mono text-[10px]">
-              {file.path}
-            </Badge>
-            <pre className="overflow-auto rounded-md bg-muted p-3 font-mono text-[11px] leading-relaxed">
-              {file.content}
-            </pre>
+            <div className="mb-1 flex items-center gap-2">
+              <Badge variant="outline" className="font-mono text-[10px]">
+                {file.path}
+              </Badge>
+              <a
+                href={downloadUrl(file.path)}
+                className="flex items-center gap-1 text-[10px] text-emerald-700 hover:underline"
+                download
+              >
+                <Download className="h-3 w-3" /> 下载
+              </a>
+            </div>
+            {file.binary ? (
+              <p className="rounded-md bg-muted p-3 text-[11px] text-muted-foreground">
+                二进制文件（如 .docx / .pptx），无法文本预览 —— 点上方「下载」用本机 Office / WPS 打开。
+              </p>
+            ) : (
+              <pre className="overflow-auto rounded-md bg-muted p-3 font-mono text-[11px] leading-relaxed">
+                {file.content}
+              </pre>
+            )}
           </>
         ) : (
           <p className="px-2 py-6 text-center text-xs text-muted-foreground">点击左侧文件查看内容</p>

@@ -230,10 +230,13 @@ describe('对照实验支持（ablation）', () => {
   test('filterTools：不传返回全部工具', async () => {
     const { filterTools, TOOLS } = await import('@/lib/agent/tools')
     expect(filterTools().length).toBe(TOOLS.length)
-    expect(filterTools().length).toBeGreaterThanOrEqual(13)
+    expect(filterTools().length).toBeGreaterThanOrEqual(15)
     // 关键工具必须存在
     const names = filterTools().map((t) => t.function.name)
-    for (const n of ['edit_file', 'multi_edit', 'glob', 'grep', 'todo_write', 'search_ast']) {
+    for (const n of [
+      'edit_file', 'multi_edit', 'glob', 'grep', 'todo_write',
+      'search_ast', 'search_semantic', 'generate_docx', 'generate_pptx',
+    ]) {
       expect(names).toContain(n)
     }
   })
@@ -646,5 +649,80 @@ describe('项目记忆（DEVmate.md，对标 CLAUDE.md）', () => {
     const mem = readProjectMemory(sid)!
     expect(mem.length).toBeLessThan(4200)
     expect(mem).toContain('已截断')
+  })
+})
+
+// ===================== 新增：文档生成（docx / pptx） =====================
+
+describe('文档生成（Word / PPT）', () => {
+  const SID_DOC = 'test-session-doc'
+
+  beforeAll(() => {
+    if (workspaceExists(SID_DOC)) fs.rmSync(sessionDir(SID_DOC), { recursive: true, force: true })
+    createWorkspace(SID_DOC)
+  })
+
+  test('generate_docx 产出合法 .docx（PK 头 + 非空）', async () => {
+    const out = await executeTool({ sessionId: SID_DOC }, 'generate_docx', {
+      path: 'out/报告.docx',
+      spec: {
+        title: '测试报告',
+        subtitle: '自动生成',
+        sections: [
+          { heading: '背景', paragraphs: ['正文段落'] },
+          { heading: '要点', bullets: ['要点一', '要点二'] },
+        ],
+      },
+    })
+    expect(out).toContain('已生成 Word 文档')
+    const buf = fs.readFileSync(safeResolve(SID_DOC, 'out/报告.docx'))
+    expect(buf.length).toBeGreaterThan(2000)
+    expect(buf.subarray(0, 2).toString('ascii')).toBe('PK') // ZIP/OOXML 魔数
+  })
+
+  test('generate_pptx 产出合法 .pptx（PK 头 + 非空）', async () => {
+    const out = await executeTool({ sessionId: SID_DOC }, 'generate_pptx', {
+      path: 'out/汇报.pptx',
+      spec: {
+        title: '汇报标题',
+        slides: [{ title: '第一页', bullets: ['x'] }, { title: '第二页' }],
+      },
+    })
+    expect(out).toContain('已生成 PPT')
+    const buf = fs.readFileSync(safeResolve(SID_DOC, 'out/汇报.pptx'))
+    expect(buf.length).toBeGreaterThan(5000)
+    expect(buf.subarray(0, 2).toString('ascii')).toBe('PK')
+  })
+
+  test('spec 非法 / 扩展名不符时给出可读错误', async () => {
+    const a = await executeTool({ sessionId: SID_DOC }, 'generate_docx', { path: 'x.docx', spec: {} })
+    expect(a).toContain('错误')
+    const b = await executeTool({ sessionId: SID_DOC }, 'generate_pptx', { path: 'x.pptx', spec: { slides: [] } })
+    expect(b).toContain('错误')
+    const c = await executeTool({ sessionId: SID_DOC }, 'generate_docx', {
+      path: 'x.txt',
+      spec: { title: 't', sections: [] },
+    })
+    expect(c).toContain('.docx')
+    const d = await executeTool({ sessionId: SID_DOC }, 'generate_pptx', {
+      path: 'y.pptx',
+      spec: { slides: [{ bullets: ['没有标题'] }] },
+    })
+    expect(d).toContain('title')
+  })
+})
+
+// ===================== 新增：规划启发式（提速） =====================
+
+describe('规划启发式（needsPlan：短任务跳过规划以提速）', () => {
+  test('短任务跳过，多要求/长任务保留规划', async () => {
+    const { needsPlan } = await import('@/lib/agent/loop')
+    // 用户举的例子：应当跳过规划（更快）
+    expect(needsPlan('重构斐波那契数列为迭代实现')).toBe(false)
+    expect(needsPlan('修 mathutils.js 的 bug 使 node --test 全通过，然后提交。')).toBe(false)
+    // 多要求 / 长描述：值得先规划
+    expect(needsPlan('修复 bug 并且补充测试，同时更新 README')).toBe(true)
+    expect(needsPlan('请分别处理以下三件事，依次完成并提交')).toBe(true)
+    expect(needsPlan('把项目里的所有函数都加上类型注解并统一格式化，确保测试通过后提交到 git')).toBe(true)
   })
 })

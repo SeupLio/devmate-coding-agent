@@ -14,6 +14,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const sessionId = String(body.sessionId ?? '')
   const task = String(body.task ?? '').slice(0, 2000)
+  // 规划模式：'auto'（短任务跳过，默认由前端传）/ true / false
+  const plan: boolean | 'auto' = body.plan === true || body.plan === false ? body.plan : 'auto'
+  // 是否允许深度思考：false 时显著更快
+  const thinking = body.thinking !== false
   if (!sessionId || !task) {
     return new Response(JSON.stringify({ error: 'sessionId 与 task 必填' }), {
       status: 400,
@@ -50,7 +54,7 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
       }
       try {
-        for await (const ev of runAgent({ sessionId, task, history: historyMessages })) {
+        for await (const ev of runAgent({ sessionId, task, history: historyMessages, plan, thinking })) {
           send(ev)
           // 持久化关键事件
           if (ev.type === 'tool_call') {
