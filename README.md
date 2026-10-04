@@ -37,6 +37,7 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 🗜️ **上下文管理** | token 预算控制，超限时自动压缩早期工具结果，压缩事件可观测 |
 | 🛡️ **沙箱安全** | 每会话独立目录 + 独立 Git 仓库，路径规范化防 `..` 逃逸，命令白名单，子进程超时强杀 |
 | 📊 **效果评估** | 五层评测：单元测试 + 常规任务 + held-out 任务 + 难任务集（多文件/长链路/环境反馈）+ 对照实验 |
+| 🌍 **真实任务基准** | **SWE-bench 式**：从真实开源仓库的**真实修复提交**自动构建任务，FAIL_TO_PASS / PASS_TO_PASS 由机器推导验证（见 [docs/BENCHMARK.md](docs/BENCHMARK.md)） |
 | 🔬 **评测自检** | 变异测试攻击评测器本身：**11 个变异体**检出率 100%；发现并修复「删测试即可通过」「伪造期望值自洽」两类作弊盲区 |
 | 🩺 **失败诊断** | 失败模式分类：把「没通过」归类为 8 种可枚举模式（未改动 / 未验证 / 超步数 / 作弊 / API 异常 …），附证据与改进建议 |
 | 🧪 **工程质量** | 67 个单元测试覆盖沙箱安全 / 工具执行 / 检索 / 编辑 / 上下文压缩 / 防作弊 / 失败分类 / 评测灵敏度 |
@@ -322,6 +323,62 @@ bun scripts/check-sensitivity.ts             # L4 评测灵敏度（不需要 LL
 沙箱模板有三套：`template-project`（mathutils，单文件 3 类 bug）、`holdout-project`
 （stringutils，另一域、预置失败测试）、`hard-project`（多文件表达式计算器，含必须运行脚本才能获得期望值的任务）。换掉对应目录即可评测你自己的项目。
 
+## 真实任务基准（对标 SWE-bench 的方法论）
+
+上面五层评测有个致命短板：**题目全是我自己造的**——我出题、我写断言、我判分，
+只能证明「链路能跑通」，不能证明「在真实代码上能干成事」。
+
+所以另建了一套**真实任务基准**（`src/lib/bench/`），把评测重建在
+**真实开源仓库的真实修复提交**上：
+
+```
+真实修复提交 fix
+  ├─ base = fix 的父提交 → 拉真实仓库快照（codeload）
+  ├─ 把 fix 里的**测试文件**覆盖到 base（Agent 看不到）
+  ├─ 阶段1 跑测试 → 失败集合 = FAIL_TO_PASS 候选
+  └─ 阶段2 套用 fix 的**源码**改动 → 必须全通过
+        └─ 两段都成立才收录 → VALID 任务
+```
+
+**判据是机器跑出来的，不是我写的** —— 断言来自上游仓库，且在 base 上确实失败，
+所以既不能「迁就断言」，也不会出现「本来就能过」的伪任务。
+
+当前收录 6 条（来自 `proxy-from-env` 与 `cel-js`），并已实测跑分：
+
+| 任务 | 仓库 | 出处 | FAIL_TO_PASS | PASS_TO_PASS |
+|---|---|---|---|---|
+| `pfe-whatwg-url` | Rob--W/proxy-from-env | issue #32 | 5 | 120 |
+| `pfe-drop-npm-config` | Rob--W/proxy-from-env | issue #13 | 5 | 121 |
+| `pfe-esm-migration` | Rob--W/proxy-from-env | issue #18 | 1 | 0 |
+| `celjs-source-ranges` | marcbachmann/cel-js | issue #90 | 5 | 7 |
+| `celjs-error-compat` | marcbachmann/cel-js | 提交推导 | 4 | 106 |
+| `celjs-diagnostics` | marcbachmann/cel-js | 提交推导 | 7 | 0 |
+
+**五条设计原则的落地**：
+
+| 原则 | 落地方式 |
+|---|---|
+| 真实性 | 任务来自真实仓库真实提交；`provenance` 强制记录出处，自造任务必须标 `synthetic` |
+| 可验证性 | FAIL_TO_PASS/PASS_TO_PASS 机器推导；开放式任务才用 LLM Judge（带 rubric + 强制引用原文 + 温度 0） |
+| 防泄露 | 隐藏测试**只在评测时拉取**（Agent 沙箱里没有）+ `collectedAt`/`modelCutoff` 时间切分 + 污染风险单列 |
+| 多维度 | 除成败外，还报 **工具使用 / 效率 / 安全 / 推理质量**，并按难度·类别·出处三向分组 |
+| 抗游戏性 | 测试不在沙箱里（没法针对断言写死）+ 判据来自上游测试 + 任务池可增量扩充 |
+
+复现：
+
+```bash
+export GITHUB_TOKEN=xxx            # 需要访问 api.github.com 与 codeload.github.com
+export BENCH_NODE_BIN=$(which node) # 跑 node --test 用
+bun scripts/bench-build.ts          # 构建并验证真实任务 → benchmarks/real-tasks.json
+bun scripts/bench-run.ts            # 跑分 → benchmarks/bench-report.txt / .json
+```
+
+> ⚠️ **诚实说明**：这套基准比旧的好，但**仍然不等于 SWE-bench**——
+> 样本只有 6 条（无统计显著性）、PASS_TO_PASS 只覆盖改动到的测试文件（非全量套件）、
+> 没有 Docker 隔离。完整局限清单见 **[docs/BENCHMARK.md](docs/BENCHMARK.md)** 第 3 节。
+> 它能支撑的说法是「在 2 个真实开源库的 6 个真实修复任务上表现如何」，
+> **不能**支撑「编码能力是 X 分」。
+
 ## 目录结构
 
 ```
@@ -343,12 +400,28 @@ src/
     llm.zai.ts                # 智谱内部 SDK 实现
     prompts.ts                # 系统提示词（工具使用纪律）
     workspace.ts              # 会话沙箱管理（独立 Git 仓库 + DEVmate.md 项目记忆）
-  lib/eval/                    # 评测体系
+  lib/eval/                    # 评测体系（自造任务，快、可控，用于回归与消融）
     tasks.ts                  # 常规 4 + held-out 4 + 难任务 3 + 防作弊断言
     runner.ts                 # 评测执行器（运行配置 / 重复轮次 / 失败分类）
     ablation.ts               # 对照实验（7 组 + 裸模型执行器）
     sensitivity.ts            # 评测灵敏度检查（变异测试，11 变异体，不需要 LLM）
     failure-modes.ts          # 失败模式分类（信号 → 8 种模式 + 证据 + 建议）
+  lib/bench/                   # 真实任务基准（对外效度）
+    types.ts                  # 任务模型（含 provenance）+ 五维结果模型
+    github.ts                 # 真实任务源（api.github.com + codeload tarball）
+    builder.ts                # SWE-bench 式任务构建器（两阶段验证 FAIL_TO_PASS）
+    registry.ts               # 真实任务种子（真实仓库 + 真实修复提交）
+    runner.ts                 # 跑 Agent + 覆盖隐藏测试 + 多维打分
+    report.ts                 # 按难度/类别/出处分组 + 污染风险
+    judge.ts                  # LLM Judge（开放式任务，四道约束防「随便给分」）
+  lib/bench/                   # 真实任务基准（对标 SWE-bench 方法论）
+    types.ts                  # 任务/结果模型（provenance、隐藏测试、五维评分）
+    github.ts                 # 从 api.github.com / codeload 拉 issue / 提交 / 仓库快照
+    builder.ts                # 两阶段验证：推导 FAIL_TO_PASS / PASS_TO_PASS
+    registry.ts               # 真实任务种子（仓库 + 修复提交 + issue）
+    runner.ts                 # 跑 Agent + 隐藏测试判定 + 多维打分
+    report.ts                 # 按难度/类别/出处分组 + 污染风险 + 失败模式
+    judge.ts                  # 开放式任务的 LLM Judge（rubric + 强制引用原文）
   components/agent/            # ToolCallCard / WorkspacePanel / EvalPanel
 tests/agent.test.ts            # 67 个单元测试
 scripts/run-agent.ts           # CLI 单任务入口
@@ -356,8 +429,13 @@ scripts/run-eval.ts            # CLI 评测入口（--only default|holdout|hard,
 scripts/run-hard.ts            # CLI 难任务集评测（含失败模式报告）
 scripts/run-ablation.ts        # CLI 对照实验入口
 scripts/check-sensitivity.ts   # CLI 评测灵敏度入口
+scripts/bench-build.ts         # 构建并验证真实任务（需要 GITHUB_TOKEN）
+scripts/bench-run.ts           # 在真实任务上跑分，产出多维报告
+scripts/bench-debug.ts         # 打印单条任务的完整轨迹（排查 Agent 卡在哪）
 docs/EVALUATION.md             # 评测方法论（五层体系）
+docs/BENCHMARK.md              # 真实任务基准设计（五条原则如何落地 + 已知局限）
 docs/PRODUCTION-READINESS.md   # 生产落地评估（自我批评：哪些设计还比较简陋）
+benchmarks/                    # 真实任务清单 + 构建报告 + 基准报告
 assets/template-project/       # 主沙箱模板（mathutils + DEVmate.md）
 assets/holdout-project/        # held-out 沙箱模板（stringutils，预置失败测试）
 assets/hard-project/           # 难任务模板（多文件计算器 + 参考实现 oracle + DEVmate.md）

@@ -85,6 +85,9 @@ const MODE_META: Record<FailureMode, { label: string; suggestion: string }> = {
 }
 
 /** 从 Agent 事件流采集失败诊断所需的信号 */
+/** 会改动文件内容的工具（edit_file / multi_edit 是现在的首选，write_file 只用于新建） */
+const EDIT_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit'])
+
 export function collectSignals(
   events: AgentEvent[],
   maxSteps: number,
@@ -96,19 +99,25 @@ export function collectSignals(
   let testRunFailures = 0
   let apiError: string | null = null
   let finished = false
-  const pending = new Map<string, string>() // tool_call id → name
+  const pending = new Map<string, { name: string; args: unknown }>() // tool_call id → 调用信息
 
   for (const ev of events) {
     if (ev.type === 'tool_call') {
-      pending.set(ev.id, ev.name)
-      if (ev.name === 'write_file') {
+      pending.set(ev.id, { name: ev.name, args: ev.args })
+      if (EDIT_TOOLS.has(ev.name)) {
         const p = (ev.args as { path?: unknown })?.path
         if (typeof p === 'string') editedFiles.push(p)
       }
     } else if (ev.type === 'tool_result') {
-      const name = pending.get(ev.id) ?? ev.name
+      const info = pending.get(ev.id)
+      const name = info?.name ?? ev.name
       toolCalls.push({ name, ok: ev.ok })
-      if (name === 'run_tests') {
+      // 跑测试既可能是 run_tests，也可能是 run_command ["node","--test",...]
+      const argsText = JSON.stringify(info?.args ?? {})
+      const isTestRun =
+        name === 'run_tests' ||
+        (name === 'run_command' && /--test|jest|vitest|mocha|\btest\b/i.test(argsText))
+      if (isTestRun) {
         ranTests = true
         const m = ev.result.match(/失败\s*(\d+)\s*项/)
         if (m && Number(m[1]) > 0) testRunFailures++
@@ -171,7 +180,7 @@ export function classifyFailure(
 
   // 4) 未改动任何文件
   if (signals.editedFiles.length === 0) {
-    return wrap('no_edit', ['全程未调用 write_file 写入任何文件'])
+    return wrap('no_edit', ['全程未改动任何文件（write_file / edit_file / multi_edit 均未调用）'])
   }
 
   // 5) 改动了但从未验证

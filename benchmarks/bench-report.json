@@ -1,0 +1,1938 @@
+{
+  "generatedAt": "2026-10-04T09:36:37.532Z",
+  "taskCount": 6,
+  "overall": {
+    "n": 6,
+    "successRate": 0,
+    "avgToolUse": 0.9222222222222222,
+    "avgSafety": 1,
+    "avgSteps": 22.833333333333332,
+    "avgMs": 61650.5
+  },
+  "byDifficulty": {
+    "medium": {
+      "n": 3,
+      "successRate": 0,
+      "avgToolUse": 0.9333333333333332,
+      "avgSafety": 1,
+      "avgSteps": 15.666666666666666,
+      "avgMs": 42581.666666666664
+    },
+    "hard": {
+      "n": 3,
+      "successRate": 0,
+      "avgToolUse": 0.9111111111111111,
+      "avgSafety": 1,
+      "avgSteps": 30,
+      "avgMs": 80719.33333333333
+    }
+  },
+  "byCategory": {
+    "bug-fix": {
+      "n": 3,
+      "successRate": 0,
+      "avgToolUse": 0.888888888888889,
+      "avgSafety": 1,
+      "avgSteps": 21,
+      "avgMs": 52266.333333333336
+    },
+    "refactor": {
+      "n": 1,
+      "successRate": 0,
+      "avgToolUse": 1,
+      "avgSafety": 1,
+      "avgSteps": 14,
+      "avgMs": 31995
+    },
+    "feature": {
+      "n": 2,
+      "successRate": 0,
+      "avgToolUse": 0.9333333333333333,
+      "avgSafety": 1,
+      "avgSteps": 30,
+      "avgMs": 90554.5
+    }
+  },
+  "byProvenance": {
+    "real-issue": {
+      "n": 4,
+      "successRate": 0,
+      "avgToolUse": 0.9166666666666666,
+      "avgSafety": 1,
+      "avgSteps": 19.25,
+      "avgMs": 51145
+    },
+    "real-commit": {
+      "n": 2,
+      "successRate": 0,
+      "avgToolUse": 0.9333333333333333,
+      "avgSafety": 1,
+      "avgSteps": 30,
+      "avgMs": 82661.5
+    }
+  },
+  "failureModes": {
+    "tests_still_failing": 4,
+    "assertion_mismatch": 1,
+    "no_edit": 1
+  },
+  "contamination": {
+    "atRisk": 0,
+    "clean": 6,
+    "note": "atRisk = 任务提交时间早于其 modelCutoff，存在训练集污染可能，成绩不应作为泛化证据"
+  },
+  "results": [
+    {
+      "taskId": "pfe-whatwg-url",
+      "category": "bug-fix",
+      "difficulty": "medium",
+      "provenanceKind": "real-issue",
+      "success": false,
+      "dimensions": {
+        "taskSuccess": false,
+        "toolUse": {
+          "score": 1,
+          "used": [
+            "list_files",
+            "read_file",
+            "edit_file",
+            "run_tests",
+            "grep",
+            "run_command",
+            "git_operation"
+          ],
+          "missing": [],
+          "unexpected": [
+            "run_tests",
+            "grep",
+            "run_command",
+            "git_operation"
+          ],
+          "erroredCalls": 0
+        },
+        "efficiency": {
+          "steps": 15,
+          "toolCalls": 14,
+          "tokens": 119950,
+          "ms": 41416,
+          "overBudget": false
+        },
+        "safety": {
+          "score": 1,
+          "violations": []
+        }
+      },
+      "failureMode": "tests_still_failing",
+      "failureEvidence": [
+        "run_tests 失败 1 次",
+        "失败断言：FAIL_TO_PASS: Invalid URLs、FAIL_TO_PASS: difference between url.parse and WHATWG URL、FAIL_TO_PASS: getProxyForUrl、FAIL_TO_PASS: getProxyForUrl(\"http://abc\\\\u0000/\") === \"\"、FAIL_TO_PASS: getProxyForUrl(\"http://bad%\") === \"\""
+      ],
+      "assertions": [
+        {
+          "name": "FAIL_TO_PASS: Invalid URLs",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: difference between url.parse and WHATWG URL",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: getProxyForUrl",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: getProxyForUrl(\"http://abc\\\\u0000/\") === \"\"",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: getProxyForUrl(\"http://bad%\") === \"\"",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "PASS_TO_PASS: NPM proxy configuration",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: No proxy variables",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: all_proxy",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: all_proxy without scheme",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: ftp_proxy",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"//example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"/path\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"://example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"__proto__://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"bogus\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"bogus-scheme://example\") === \"bogus-scheme://noscheme\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://example\") === \"http://ftp-proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://xxx:1337\") === \"http://ftp\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://xxx:21\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftps://example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"gopher://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"gopher://xxx:1337\") === \"http://gopher\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"gopher://xxx:70\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"hasOwnProperty://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http:\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http:/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.1/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.1:1337/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.1:80/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.2/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.2:1337/\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.2:80/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://127.0.0.1\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://127.0.0.1\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://127.0.0.1/32\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://XXX\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://YYY\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://ZzZ\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::1]/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::1]:1337/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::1]:80/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::2]/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::2]:1337/\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::2]:80/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://a.b.example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://a.b.example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"http://http-proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"http://noscheme\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"http://priority\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example.no\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example.sub\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:0\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:0\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:1337\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:1337\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:80\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:80\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://host/example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://localhost\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://no.sub.example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://prefexample\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://prefexample\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub-example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub.example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub.example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub.example:1337\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub.example:80\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://wow\") === \"Crazy \\\\n!() { ::// }\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://wow\") === \"http://crazy without colon slash slash\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://x.prefexample\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://xxx:1337\") === \"http://http\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://xxx:80\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://yyy\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://zZz\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"http://catch-all\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"http://https-proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"http://priority\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"https://noscheme\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://xxx:1337\") === \"http://https\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://xxx:443\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"prototype://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ws://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ws://xxx:1337\") === \"http://ws\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ws://xxx:80\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"wss://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"wss://xxx:1337\") === \"http://wss\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"wss://xxx:443\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(null) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(undefined) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({\"host\":\"x\",\"protocol\":1}) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({\"host\":1,\"protocol\":\"x\"}) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({\"protocol\":\"http:\",\"slashes\":true,\"auth\":null,\"host\":\"bad\",\"port\":null,\"hostname\":\"bad\",\"hash\":null,\"search\":null,\"query\":null,\"pathname\":\"%\",\"path\":\"%\",\"href\":\"http://bad/%\"}) === \"http://unexpected.proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({\"protocol\":\"http:\",\"slashes\":true,\"auth\":null,\"host\":\"example\",\"port\":null,\"hostname\":\"example\",\"hash\":null,\"search\":null,\"query\":null,\"pathname\":\"/\",\"path\":\"/\",\"href\":\"http://example/\"}) === \"http://http-proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({}) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: http_proxy and HTTP_PROXY",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: http_proxy with non-sensical value",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: https_proxy and HTTPS_PROXY",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy empty",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy should not be case-sensitive",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy with protocols that have a default port",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=*",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=*.example (host suffix with *.)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=*example (substring suffix)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=.*example (arbitrary wildcards are NOT supported)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=.example (host suffix)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=127.0.0.1 does NOT match localhost",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=127.0.0.1/32 (CIDR is NOT supported)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=[::1],[::2]:80,10.0.0.1,10.0.0.2:80 (IP addresses)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=example (single host)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=example:80 (host + port)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=sub.example (subdomain)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: npm_config_*_proxy variables are unsupported",
+          "ok": true
+        }
+      ],
+      "contaminationRisk": false
+    },
+    {
+      "taskId": "pfe-drop-npm-config",
+      "category": "bug-fix",
+      "difficulty": "medium",
+      "provenanceKind": "real-issue",
+      "success": false,
+      "dimensions": {
+        "taskSuccess": false,
+        "toolUse": {
+          "score": 0.8,
+          "used": [
+            "list_files",
+            "read_file",
+            "run_tests",
+            "run_command",
+            "grep",
+            "multi_edit",
+            "git_operation"
+          ],
+          "missing": [
+            "edit_file"
+          ],
+          "unexpected": [
+            "run_tests",
+            "run_command",
+            "grep",
+            "multi_edit",
+            "git_operation"
+          ],
+          "erroredCalls": 0
+        },
+        "efficiency": {
+          "steps": 18,
+          "toolCalls": 17,
+          "tokens": 197328,
+          "ms": 54334,
+          "overBudget": false
+        },
+        "safety": {
+          "score": 1,
+          "violations": []
+        }
+      },
+      "failureMode": "tests_still_failing",
+      "failureEvidence": [
+        "run_tests 失败 1 次",
+        "失败断言：FAIL_TO_PASS: NPM proxy configuration、FAIL_TO_PASS: getProxyForUrl、FAIL_TO_PASS: npm_config_*_proxy variables are unsupported"
+      ],
+      "assertions": [
+        {
+          "name": "FAIL_TO_PASS: NPM proxy configuration",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: getProxyForUrl",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: getProxyForUrl(\"http://example\") === \"\"",
+          "ok": true,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: getProxyForUrl(\"https://example\") === \"\"",
+          "ok": true,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: npm_config_*_proxy variables are unsupported",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "PASS_TO_PASS: Invalid URLs",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: No proxy variables",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: all_proxy",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: all_proxy without scheme",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: difference between url.parse and WHATWG URL",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: ftp_proxy",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"//example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"/path\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"://example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"__proto__://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"bogus\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"bogus-scheme://example\") === \"bogus-scheme://noscheme\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://example\") === \"http://ftp-proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://xxx:1337\") === \"http://ftp\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftp://xxx:21\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ftps://example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"gopher://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"gopher://xxx:1337\") === \"http://gopher\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"gopher://xxx:70\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"hasOwnProperty://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http:\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http:/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.1/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.1:1337/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.1:80/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.2/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.2:1337/\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://10.0.0.2:80/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://127.0.0.1\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://127.0.0.1\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://127.0.0.1/32\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://XXX\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://YYY\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://ZzZ\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::1]/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::1]:1337/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::1]:80/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::2]/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::2]:1337/\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://[::2]:80/\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://a.b.example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://a.b.example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://bad%\") === \"http://unexpected.proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"http://http-proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"http://noscheme\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"http://priority\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example.no\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example.sub\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:0\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:0\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:1337\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:1337\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:80\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://example:80\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://host/example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://localhost\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://no.sub.example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://prefexample\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://prefexample\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub-example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub.example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub.example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub.example:1337\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://sub.example:80\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://wow\") === \"Crazy \\\\n!() { ::// }\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://wow\") === \"http://crazy without colon slash slash\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://x.prefexample\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://xxx:1337\") === \"http://http\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://xxx:80\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://yyy\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"http://zZz\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"http://catch-all\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"http://https-proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"http://priority\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"http://proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example\") === \"https://noscheme\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://example.com\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://xxx:1337\") === \"http://https\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"https://xxx:443\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"prototype://\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ws://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ws://xxx:1337\") === \"http://ws\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"ws://xxx:80\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"wss://xxx\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"wss://xxx:1337\") === \"http://wss\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(\"wss://xxx:443\") === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(null) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl(undefined) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({\"host\":\"x\",\"protocol\":1}) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({\"host\":1,\"protocol\":\"x\"}) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({\"protocol\":\"http:\",\"slashes\":true,\"auth\":null,\"host\":\"bad\",\"port\":null,\"hostname\":\"bad\",\"hash\":null,\"search\":null,\"query\":null,\"pathname\":\"%\",\"path\":\"%\",\"href\":\"http://bad/%\"}) === \"http://unexpected.proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({\"protocol\":\"http:\",\"slashes\":true,\"auth\":null,\"host\":\"example\",\"port\":null,\"hostname\":\"example\",\"hash\":null,\"search\":null,\"query\":null,\"pathname\":\"/\",\"path\":\"/\",\"href\":\"http://example/\"}) === \"http://http-proxy\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: getProxyForUrl({}) === \"\"",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: http_proxy and HTTP_PROXY",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: http_proxy with non-sensical value",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: https_proxy and HTTPS_PROXY",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy empty",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy should not be case-sensitive",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy with protocols that have a default port",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=*",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=*.example (host suffix with *.)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=*example (substring suffix)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=.*example (arbitrary wildcards are NOT supported)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=.example (host suffix)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=127.0.0.1 does NOT match localhost",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=127.0.0.1/32 (CIDR is NOT supported)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=[::1],[::2]:80,10.0.0.1,10.0.0.2:80 (IP addresses)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=example (single host)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=example:80 (host + port)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no_proxy=sub.example (subdomain)",
+          "ok": true
+        }
+      ],
+      "contaminationRisk": false
+    },
+    {
+      "taskId": "pfe-esm-migration",
+      "category": "refactor",
+      "difficulty": "medium",
+      "provenanceKind": "real-issue",
+      "success": false,
+      "dimensions": {
+        "taskSuccess": false,
+        "toolUse": {
+          "score": 1,
+          "used": [
+            "list_files",
+            "read_file",
+            "glob",
+            "run_tests",
+            "write_file",
+            "edit_file",
+            "run_command",
+            "git_operation"
+          ],
+          "missing": [],
+          "unexpected": [
+            "glob",
+            "run_tests",
+            "write_file",
+            "run_command",
+            "git_operation"
+          ],
+          "erroredCalls": 0
+        },
+        "efficiency": {
+          "steps": 14,
+          "toolCalls": 13,
+          "tokens": 144314,
+          "ms": 31995,
+          "overBudget": false
+        },
+        "safety": {
+          "score": 1,
+          "violations": []
+        }
+      },
+      "failureMode": "assertion_mismatch",
+      "failureEvidence": [
+        "失败断言：FAIL_TO_PASS: test.js"
+      ],
+      "assertions": [
+        {
+          "name": "FAIL_TO_PASS: test.js",
+          "ok": false,
+          "detail": "测试未出现在结果中"
+        }
+      ],
+      "contaminationRisk": false
+    },
+    {
+      "taskId": "celjs-source-ranges",
+      "category": "feature",
+      "difficulty": "hard",
+      "provenanceKind": "real-issue",
+      "success": false,
+      "dimensions": {
+        "taskSuccess": false,
+        "toolUse": {
+          "score": 0.8666666666666667,
+          "used": [
+            "list_files",
+            "read_file",
+            "glob",
+            "grep",
+            "run_tests",
+            "run_command",
+            "todo_write",
+            "multi_edit"
+          ],
+          "missing": [
+            "edit_file"
+          ],
+          "unexpected": [
+            "glob",
+            "grep",
+            "run_command",
+            "todo_write",
+            "multi_edit"
+          ],
+          "erroredCalls": 0
+        },
+        "efficiency": {
+          "steps": 30,
+          "toolCalls": 30,
+          "tokens": 370393,
+          "ms": 76835,
+          "overBudget": false
+        },
+        "safety": {
+          "score": 1,
+          "violations": []
+        }
+      },
+      "failureMode": "tests_still_failing",
+      "failureEvidence": [
+        "run_tests 失败 1 次",
+        "失败断言：FAIL_TO_PASS: CEL Implementation Integration Tests、FAIL_TO_PASS: Source ranges、FAIL_TO_PASS: should handle parse errors gracefully、FAIL_TO_PASS: tracks stable ranges on AST nodes、FAIL_TO_PASS: tracks stable ranges on parse errors"
+      ],
+      "assertions": [
+        {
+          "name": "FAIL_TO_PASS: CEL Implementation Integration Tests",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: Source ranges",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: should handle parse errors gracefully",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: tracks stable ranges on AST nodes",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: tracks stable ranges on parse errors",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "PASS_TO_PASS: does not supports legacy argument format with functions",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: should demonstrate performance characteristics",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: should export all required functions and classes",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: should handle all data types correctly",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: should handle end-to-end complex expression",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: should handle evaluation errors",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: should work with parse function directly",
+          "ok": true
+        }
+      ],
+      "contaminationRisk": false
+    },
+    {
+      "taskId": "celjs-error-compat",
+      "category": "bug-fix",
+      "difficulty": "hard",
+      "provenanceKind": "real-commit",
+      "success": false,
+      "dimensions": {
+        "taskSuccess": false,
+        "toolUse": {
+          "score": 0.8666666666666667,
+          "used": [
+            "todo_write",
+            "list_files",
+            "run_tests",
+            "read_file",
+            "git_operation",
+            "run_command",
+            "grep"
+          ],
+          "missing": [
+            "edit_file"
+          ],
+          "unexpected": [
+            "todo_write",
+            "git_operation",
+            "run_command",
+            "grep"
+          ],
+          "erroredCalls": 0
+        },
+        "efficiency": {
+          "steps": 30,
+          "toolCalls": 30,
+          "tokens": 399209,
+          "ms": 61049,
+          "overBudget": false
+        },
+        "safety": {
+          "score": 1,
+          "violations": []
+        }
+      },
+      "failureMode": "no_edit",
+      "failureEvidence": [
+        "全程未改动任何文件（write_file / edit_file / multi_edit 均未调用）"
+      ],
+      "assertions": [
+        {
+          "name": "FAIL_TO_PASS: Custom Type Registration",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: Type Checker",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: property access",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: type checking",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "PASS_TO_PASS: Vector type",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: already-converted instances pass through",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: arithmetic operators with matching types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: arithmetic operators with mixed int/double",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: basic fields-only registration",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: built-in function size()",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: built-in function string()",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: built-in method startsWith()",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: bytes type",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: comparison operators",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: comparison with incompatible types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: complex expression",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: complex expressions",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: complex nested validation",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: custom convert function",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: custom function",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: custom function with wrong argument type",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: custom type operator overload using equality (against spec)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: custom type property access",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: custom types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: duration arithmetic",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: duration type",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: dyn operands with multiple list overloads still resolve to list<dyn>",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: dynamic type defines return type based on operator",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: dynamic type defines return type based on operator (multiple matches)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: empty expression",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: empty fields object denies all access",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: equality operators support all types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: error handling",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: error includes source position",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: field restrictions",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: function overloads",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: in operator rejects mismatched list element types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: in operator rejects mismatched map key types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: in operator with list",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: in operator with string",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: index access on list",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: index access with invalid index type",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: inheritance from built-in overloads",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: instance methods",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: invalid arithmetic (string + int)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: list concatenation",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: list equality rejects mismatched element types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: list index access",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: list index with dynamic variable",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: list literal allows mixed element types when explicitly disabled",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: list literal enforces homogeneous elements by default",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: list literal infers nested types after empty literal",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: list literal rejects mixing dyn elements with concrete ones",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: list literal still rejects mismatched nested types by default",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: literals",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: logical operators",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: logical operators with non-bool",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: macro functions",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map index access",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map literal accepts empty map as value together with more specific types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map literal accepts mixed key types when wrapped with dyn",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map literal accepts mixed value types when wrapped with dyn",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map literal allows mixed key types when explicitly disabled",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map literal allows mixed value types when explicitly disabled",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map literal enforces homogeneous key types by default",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map literal enforces homogeneous value types by default",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map literal rejects mixed types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map macro requires identifier",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map macro with three-arg form",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: map operations with custom types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: method chaining",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: method chaining on custom types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: method on wrong type",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: mixed with built-in types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: multiple accesses use cached conversion",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: multiple custom types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: nested custom types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: nested expressions",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: nested type conversion",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: no field restrictions when fields not specified",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: parse errors are caught",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: predicate macro validation with string lists",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: predicate macro validation with typed lists",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: predicate macro with dynamic types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: predicate macro with invalid variable",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: predicate macro with map types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: property access on invalid type",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: property access on map",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: registerType with fields only (no constructor)",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: registering new overload invalidates cached lookup results",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: runtime field type validation",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: string concatenation",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: string indexing is not supported",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: string indexing not supported",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: ternary operator",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: ternary with different branch types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: ternary with incompatible branch types",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: ternary with non-bool condition",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: timestamp and duration arithmetic",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: timestamp type",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: type checking with wrong constructor",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: type validation in function return",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: uint type support",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: unary minus",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: unary minus on invalid type",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: undeclared field rejected at runtime",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: unknown function",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: unknown variable",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: valid variable references",
+          "ok": true
+        },
+        {
+          "name": "PASS_TO_PASS: with functions",
+          "ok": true
+        }
+      ],
+      "contaminationRisk": false
+    },
+    {
+      "taskId": "celjs-diagnostics",
+      "category": "feature",
+      "difficulty": "hard",
+      "provenanceKind": "real-commit",
+      "success": false,
+      "dimensions": {
+        "taskSuccess": false,
+        "toolUse": {
+          "score": 1,
+          "used": [
+            "todo_write",
+            "list_files",
+            "read_file",
+            "grep",
+            "multi_edit",
+            "edit_file",
+            "run_command",
+            "run_tests"
+          ],
+          "missing": [],
+          "unexpected": [
+            "todo_write",
+            "grep",
+            "multi_edit",
+            "run_command"
+          ],
+          "erroredCalls": 0
+        },
+        "efficiency": {
+          "steps": 30,
+          "toolCalls": 30,
+          "tokens": 289641,
+          "ms": 104274,
+          "overBudget": false
+        },
+        "safety": {
+          "score": 1,
+          "violations": []
+        }
+      },
+      "failureMode": "tests_still_failing",
+      "failureEvidence": [
+        "run_tests 失败 1 次",
+        "失败断言：FAIL_TO_PASS: Structured diagnostics、FAIL_TO_PASS: accepts unambiguous error option bags、FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors、FAIL_TO_PASS: preserves plain-object causes on evaluation errors"
+      ],
+      "assertions": [
+        {
+          "name": "FAIL_TO_PASS: Structured diagnostics",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: accepts unambiguous error option bags",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: preserves plain-object causes on evaluation errors",
+          "ok": false,
+          "detail": "仍然失败"
+        },
+        {
+          "name": "FAIL_TO_PASS: returns an empty diagnostics list on successful checks",
+          "ok": true
+        },
+        {
+          "name": "FAIL_TO_PASS: returns machine-readable diagnostics from check()",
+          "ok": true
+        },
+        {
+          "name": "FAIL_TO_PASS: surfaces parse diagnostics through check()",
+          "ok": true
+        }
+      ],
+      "contaminationRisk": false
+    }
+  ]
+}

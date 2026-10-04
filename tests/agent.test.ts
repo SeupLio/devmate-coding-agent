@@ -92,6 +92,18 @@ describe('工具执行', () => {
     expect(lines[2]).toContain('    8|')
   })
 
+  test('read_file 重复读同一区间返回提示而非全文（抑制无效循环），内容变化后恢复', async () => {
+    await executeTool({ sessionId: SID }, 'write_file', { path: 'dedup-demo.js', content: 'a\nb\nc\nd\ne\n' })
+    const first = await executeTool({ sessionId: SID }, 'read_file', { path: 'dedup-demo.js', offset: 1, limit: 3 })
+    expect(first).toContain('1| a')
+    const second = await executeTool({ sessionId: SID }, 'read_file', { path: 'dedup-demo.js', offset: 1, limit: 3 })
+    expect(second).toContain('重复读取')
+    // 文件内容变了 → 必须重新返回全文，不能因为「读过」就把新内容吞掉
+    await executeTool({ sessionId: SID }, 'edit_file', { path: 'dedup-demo.js', old_string: 'a', new_string: 'A' })
+    const third = await executeTool({ sessionId: SID }, 'read_file', { path: 'dedup-demo.js', offset: 1, limit: 3 })
+    expect(third).toContain('1| A')
+  })
+
   test('edit_file 精确替换（唯一命中才允许）', async () => {
     await executeTool({ sessionId: SID }, 'write_file', { path: 'edit-demo.js', content: 'const a = 1\nconst b = 2\n' })
     const ok = await executeTool({ sessionId: SID }, 'edit_file', {
@@ -579,6 +591,30 @@ describe('失败模式分类', () => {
     expect(d.mode).toBe('not_verified')
   })
 
+  test('edit_file / multi_edit 也算「改动文件」（旧实现只认 write_file）', async () => {
+    const { collectSignals } = await import('@/lib/eval/failure-modes')
+    const events: AgentEvent[] = [
+      { type: 'tool_call', id: '1', name: 'edit_file', args: { path: 'a.js' } },
+      { type: 'tool_result', id: '1', name: 'edit_file', result: '已编辑 a.js', ok: true },
+      { type: 'tool_call', id: '2', name: 'multi_edit', args: { path: 'b.js' } },
+      { type: 'tool_result', id: '2', name: 'multi_edit', result: '已应用 2 处替换', ok: true },
+      finalEv(3, 2),
+    ]
+    const sig = collectSignals(events, 12)
+    expect(sig.editedFiles).toContain('a.js')
+    expect(sig.editedFiles).toContain('b.js')
+  })
+
+  test('run_command 跑测试也算「验证过」（旧实现只认 run_tests）', async () => {
+    const { collectSignals } = await import('@/lib/eval/failure-modes')
+    const events: AgentEvent[] = [
+      { type: 'tool_call', id: '1', name: 'run_command', args: { command: ['node', '--test'] } },
+      { type: 'tool_result', id: '1', name: 'run_command', result: 'exit code: 1', ok: true },
+      finalEv(2, 1),
+    ]
+    expect(collectSignals(events, 12).ranTests).toBe(true)
+  })
+
   test('跑测试且失败 → tests_still_failing', async () => {
     const { classifyFailure, collectSignals } = await import('@/lib/eval/failure-modes')
     const events: AgentEvent[] = [
@@ -724,5 +760,99 @@ describe('规划启发式（needsPlan：短任务跳过规划以提速）', () =
     expect(needsPlan('修复 bug 并且补充测试，同时更新 README')).toBe(true)
     expect(needsPlan('请分别处理以下三件事，依次完成并提交')).toBe(true)
     expect(needsPlan('把项目里的所有函数都加上类型注解并统一格式化，确保测试通过后提交到 git')).toBe(true)
+  })
+})
+
+// ===================== 新增：真实任务基准（bench） =====================
+
+describe('真实任务基准（bench）', () => {
+  test('isTestPath 正确区分测试文件与源码（构建器靠它挑出隐藏测试）', async () => {
+    const { isTestPath } = await import('@/lib/bench/github')
+    for (const p of ['test.js', 'test/foo.test.js', 'src/a.spec.ts', 'tests/x.mjs', '__tests__/y.js']) {
+      expect(isTestPath(p)).toBe(true)
+    }
+    for (const p of ['src/index.js', 'lib/evaluator.js', 'package.json', 'README.md']) {
+      expect(isTestPath(p)).toBe(false)
+    }
+  })
+
+  test('toBenchTask 保留可审计的真实出处，并把测试放进隐藏集', async () => {
+    const { toBenchTask } = await import('@/lib/bench/builder')
+    const t = toBenchTask(
+      {
+        verdict: 'VALID',
+        repo: 'owner/repo',
+        fixCommit: 'fixsha',
+        baseCommit: 'basesha',
+        testFiles: ['test/a.test.js'],
+        srcFiles: ['src/a.js'],
+        failToPass: ['t1', 't2'],
+        passToPass: ['t3'],
+      },
+      {
+        id: 'x',
+        prompt: 'p',
+        category: 'bug-fix',
+        difficulty: 'medium',
+        issueNumber: 7,
+        testCommand: ['node', '--test'],
+        modelCutoff: '2025-06-01',
+      },
+    )
+    expect(t.provenance.kind).toBe('real-issue')
+    expect(t.provenance.baseCommit).toBe('basesha')
+    expect(t.provenance.issueNumber).toBe(7)
+    expect(t.verification.failToPass).toEqual(['t1', 't2'])
+    expect(t.verification.passToPass).toEqual(['t3'])
+    // 测试只在评测侧拉取 → 不进沙箱
+    expect(t.hiddenTests).toEqual([{ path: 'test/a.test.js', ref: 'fixsha' }])
+    // 参考解不暴露给 Agent
+    expect(t.verification.goldPatchFiles).toEqual(['src/a.js'])
+  })
+
+  test('buildReport 按难度/类别/出处分组，并单列污染风险', async () => {
+    const { buildReport, formatReport } = await import('@/lib/bench/report')
+    const mk = (
+      id: string,
+      difficulty: 'easy' | 'medium' | 'hard',
+      category: 'bug-fix' | 'feature',
+      kind: 'real-issue' | 'real-commit',
+      success: boolean,
+      risk: boolean,
+    ) => ({
+      taskId: id,
+      category,
+      difficulty,
+      provenanceKind: kind,
+      success,
+      dimensions: {
+        taskSuccess: success,
+        toolUse: { score: 1, used: [], missing: [], unexpected: [], erroredCalls: 0 },
+        efficiency: { steps: 10, toolCalls: 10, tokens: 100, ms: 1000, overBudget: false },
+        safety: { score: 1, violations: [] },
+      },
+      failureMode: success ? 'passed' : 'tests_still_failing',
+      failureEvidence: [],
+      assertions: [],
+      contaminationRisk: risk,
+    })
+    const rep = buildReport([
+      mk('a', 'easy', 'bug-fix', 'real-issue', true, false) as never,
+      mk('b', 'easy', 'bug-fix', 'real-issue', false, false) as never,
+      mk('c', 'hard', 'feature', 'real-commit', true, true) as never,
+    ])
+    expect(rep.taskCount).toBe(3)
+    expect(rep.overall.successRate).toBeCloseTo(2 / 3)
+    expect(rep.byDifficulty.easy.n).toBe(2)
+    expect(rep.byDifficulty.hard.successRate).toBe(1)
+    expect(rep.byProvenance['real-commit'].n).toBe(1)
+    expect(rep.failureModes.tests_still_failing).toBe(1)
+    expect(rep.contamination.atRisk).toBe(1)
+    expect(formatReport(rep)).toContain('按出处（真实性）')
+  })
+
+  test('LLM judge 缺少 rubric 时拒绝判定（防止「随便给分」）', async () => {
+    const { judgeWithLlm } = await import('@/lib/bench/judge')
+    await expect(judgeWithLlm({ task: 't', rubric: [], artifact: 'a' })).rejects.toThrow(/rubric/)
   })
 })

@@ -1,0 +1,659 @@
+[
+  {
+    "id": "pfe-whatwg-url",
+    "prompt": "# Replace deprecated url.parse() with WHATWG URL API\n\n# Issue: Replace deprecated url.parse() with WHATWG URL API\n\n## Description\n\nThe library currently uses Node.js's deprecated `url.parse()` method, which triggers a DEP0169 deprecation warning in Node.js v14+:\n\n```\n(node:xxxxx) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.\n```\n\nThis warning appears in projects that depend on `proxy-from-env` (directly or transitively through packages like axios).\n\n## Impact\n\n- **7.6 million+ dependent projects** are affected by this deprecation warning\n- The warning appears in popular packages:\n  - axios (used by millions of projects)\n  - Socket.io ([Issue #5377](https://github.com/socketio/socket.io/issues/5377))\n  - Microsoft Playwright ([Issue #38469](https://github.com/microsoft/playwright/issues/38469))\n  - GitHub Actions setup-node ([Issue #1370](https://github.com/actions/setup-node/issues/1370))\n  - Many Next.js applications\n  - And countless others\n\n## Current Code\n\n```javascript\n// Line 3\nvar parseUrl = require('url').parse;\n\n// Line 24\nvar parsedUrl = typeof url === 'string' ? parseUrl(url) : url || {};\n```\n\n## Proposed Solution\n\nReplace `url.parse()` with the WHATWG URL API (`new URL()`):\n\n```javascript\nfunction parseUrl(urlString) {\n  try {\n    return new URL(urlString);\n  } catch (error) {\n    // Return empty object for invalid URLs (matching url.parse behavior)\n    return {};\n  }\n}\n\nvar parsedUrl = typeof url === 'string' ? parseUrl(url) : url || {};\n```\n\n## Benefits\n\n1. ✅ Eliminates deprecation warning\n2. ✅ Uses standardized WHATWG URL API\n3. ✅ Maintains backward compatibility\n4. ✅ Same behavior for invalid URLs\n5. ✅ Future-proof (Node.js may eventually remove `url.parse()`)\n\n## Compatibility\n\n- The WHATWG URL API has been available since Node.js v7.0.0 (2016)\n- Current proxy-from-env requires Node.js >=6.0.0\n- The library only uses 3 properties: `protocol`, `host`, and `port`\n- These properties exist on both `url.parse()` results and WHATWG `URL` objects\n\n## Testing\n\nThe fix has been tested with:\n- Valid HTTP/HTTPS URLs\n- Invalid URLs (returns empty object)\n- URLs with various proxy environment variable configurations\n- Both string URLs and pre-parsed URL objects\n\n## Additional Context\n\nNode.js documentation states:\n> The legacy `url.parse()` API is deprecated. Users should use the WHATWG URL API instead. CVEs are not issued for `url.parse()` \n...(issue 正文已截断)\n\n---\n以上是 Rob--W/proxy-from-env 仓库的真实 issue（#32）。请在该仓库中修复它。\n要求：不要修改任何测试文件；改完后运行测试确认通过。",
+    "category": "bug-fix",
+    "difficulty": "medium",
+    "provenance": {
+      "kind": "real-issue",
+      "repo": "Rob--W/proxy-from-env",
+      "baseCommit": "00ac7ff5c315409cfd1d7a6ac6ac03eebf5fb661",
+      "fixCommit": "e32b37e7df",
+      "issueNumber": 32,
+      "issueUrl": "https://github.com/Rob--W/proxy-from-env/issues/32",
+      "collectedAt": "2026-10-04T09:14:42.150Z",
+      "modelCutoff": "2025-06-01",
+      "note": "真实 issue #32：用 WHATWG URL 替换已废弃的 url.parse。修复提交同时改了 index.js 与 test.js。"
+    },
+    "setup": {
+      "testCommand": [
+        "node",
+        "--test"
+      ]
+    },
+    "verification": {
+      "mode": "tests",
+      "failToPass": [
+        "Invalid URLs",
+        "difference between url.parse and WHATWG URL",
+        "getProxyForUrl",
+        "getProxyForUrl(\"http://abc\\\\u0000/\") === \"\"",
+        "getProxyForUrl(\"http://bad%\") === \"\""
+      ],
+      "passToPass": [
+        "NPM proxy configuration",
+        "No proxy variables",
+        "all_proxy",
+        "all_proxy without scheme",
+        "ftp_proxy",
+        "getProxyForUrl(\"\") === \"\"",
+        "getProxyForUrl(\"//example.com\") === \"\"",
+        "getProxyForUrl(\"/path\") === \"\"",
+        "getProxyForUrl(\"://\") === \"\"",
+        "getProxyForUrl(\"://example.com\") === \"\"",
+        "getProxyForUrl(\"__proto__://\") === \"\"",
+        "getProxyForUrl(\"bogus\") === \"\"",
+        "getProxyForUrl(\"bogus-scheme://example\") === \"bogus-scheme://noscheme\"",
+        "getProxyForUrl(\"ftp://example\") === \"http://ftp-proxy\"",
+        "getProxyForUrl(\"ftp://example.com\") === \"\"",
+        "getProxyForUrl(\"ftp://xxx\") === \"\"",
+        "getProxyForUrl(\"ftp://xxx:1337\") === \"http://ftp\"",
+        "getProxyForUrl(\"ftp://xxx:21\") === \"\"",
+        "getProxyForUrl(\"ftps://example\") === \"\"",
+        "getProxyForUrl(\"gopher://xxx\") === \"\"",
+        "getProxyForUrl(\"gopher://xxx:1337\") === \"http://gopher\"",
+        "getProxyForUrl(\"gopher://xxx:70\") === \"\"",
+        "getProxyForUrl(\"hasOwnProperty://\") === \"\"",
+        "getProxyForUrl(\"http:\") === \"\"",
+        "getProxyForUrl(\"http:/\") === \"\"",
+        "getProxyForUrl(\"http://\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.1/\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.1:1337/\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.1:80/\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.2/\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.2:1337/\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://10.0.0.2:80/\") === \"\"",
+        "getProxyForUrl(\"http://127.0.0.1\") === \"\"",
+        "getProxyForUrl(\"http://127.0.0.1\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://127.0.0.1/32\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://XXX\") === \"\"",
+        "getProxyForUrl(\"http://YYY\") === \"\"",
+        "getProxyForUrl(\"http://ZzZ\") === \"\"",
+        "getProxyForUrl(\"http://[::1]/\") === \"\"",
+        "getProxyForUrl(\"http://[::1]:1337/\") === \"\"",
+        "getProxyForUrl(\"http://[::1]:80/\") === \"\"",
+        "getProxyForUrl(\"http://[::2]/\") === \"\"",
+        "getProxyForUrl(\"http://[::2]:1337/\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://[::2]:80/\") === \"\"",
+        "getProxyForUrl(\"http://a.b.example\") === \"\"",
+        "getProxyForUrl(\"http://a.b.example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example\") === \"\"",
+        "getProxyForUrl(\"http://example\") === \"http://http-proxy\"",
+        "getProxyForUrl(\"http://example\") === \"http://noscheme\"",
+        "getProxyForUrl(\"http://example\") === \"http://priority\"",
+        "getProxyForUrl(\"http://example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example.com\") === \"\"",
+        "getProxyForUrl(\"http://example.no\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example.sub\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example:0\") === \"\"",
+        "getProxyForUrl(\"http://example:0\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example:1337\") === \"\"",
+        "getProxyForUrl(\"http://example:1337\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example:80\") === \"\"",
+        "getProxyForUrl(\"http://example:80\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://host/example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://localhost\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://no.sub.example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://prefexample\") === \"\"",
+        "getProxyForUrl(\"http://prefexample\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://sub-example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://sub.example\") === \"\"",
+        "getProxyForUrl(\"http://sub.example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://sub.example:1337\") === \"\"",
+        "getProxyForUrl(\"http://sub.example:80\") === \"\"",
+        "getProxyForUrl(\"http://wow\") === \"Crazy \\\\n!() { ::// }\"",
+        "getProxyForUrl(\"http://wow\") === \"http://crazy without colon slash slash\"",
+        "getProxyForUrl(\"http://x.prefexample\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://xxx\") === \"\"",
+        "getProxyForUrl(\"http://xxx:1337\") === \"http://http\"",
+        "getProxyForUrl(\"http://xxx:80\") === \"\"",
+        "getProxyForUrl(\"http://yyy\") === \"\"",
+        "getProxyForUrl(\"http://zZz\") === \"\"",
+        "getProxyForUrl(\"https://example\") === \"\"",
+        "getProxyForUrl(\"https://example\") === \"http://catch-all\"",
+        "getProxyForUrl(\"https://example\") === \"http://https-proxy\"",
+        "getProxyForUrl(\"https://example\") === \"http://priority\"",
+        "getProxyForUrl(\"https://example\") === \"http://proxy\"",
+        "getProxyForUrl(\"https://example\") === \"https://noscheme\"",
+        "getProxyForUrl(\"https://example.com\") === \"\"",
+        "getProxyForUrl(\"https://xxx\") === \"\"",
+        "getProxyForUrl(\"https://xxx:1337\") === \"http://https\"",
+        "getProxyForUrl(\"https://xxx:443\") === \"\"",
+        "getProxyForUrl(\"prototype://\") === \"\"",
+        "getProxyForUrl(\"ws://xxx\") === \"\"",
+        "getProxyForUrl(\"ws://xxx:1337\") === \"http://ws\"",
+        "getProxyForUrl(\"ws://xxx:80\") === \"\"",
+        "getProxyForUrl(\"wss://xxx\") === \"\"",
+        "getProxyForUrl(\"wss://xxx:1337\") === \"http://wss\"",
+        "getProxyForUrl(\"wss://xxx:443\") === \"\"",
+        "getProxyForUrl(null) === \"\"",
+        "getProxyForUrl(undefined) === \"\"",
+        "getProxyForUrl({\"host\":\"x\",\"protocol\":1}) === \"\"",
+        "getProxyForUrl({\"host\":1,\"protocol\":\"x\"}) === \"\"",
+        "getProxyForUrl({\"protocol\":\"http:\",\"slashes\":true,\"auth\":null,\"host\":\"bad\",\"port\":null,\"hostname\":\"bad\",\"hash\":null,\"search\":null,\"query\":null,\"pathname\":\"%\",\"path\":\"%\",\"href\":\"http://bad/%\"}) === \"http://unexpected.proxy\"",
+        "getProxyForUrl({\"protocol\":\"http:\",\"slashes\":true,\"auth\":null,\"host\":\"example\",\"port\":null,\"hostname\":\"example\",\"hash\":null,\"search\":null,\"query\":null,\"pathname\":\"/\",\"path\":\"/\",\"href\":\"http://example/\"}) === \"http://http-proxy\"",
+        "getProxyForUrl({}) === \"\"",
+        "http_proxy and HTTP_PROXY",
+        "http_proxy with non-sensical value",
+        "https_proxy and HTTPS_PROXY",
+        "no_proxy empty",
+        "no_proxy should not be case-sensitive",
+        "no_proxy with protocols that have a default port",
+        "no_proxy=*",
+        "no_proxy=*.example (host suffix with *.)",
+        "no_proxy=*example (substring suffix)",
+        "no_proxy=.*example (arbitrary wildcards are NOT supported)",
+        "no_proxy=.example (host suffix)",
+        "no_proxy=127.0.0.1 does NOT match localhost",
+        "no_proxy=127.0.0.1/32 (CIDR is NOT supported)",
+        "no_proxy=[::1],[::2]:80,10.0.0.1,10.0.0.2:80 (IP addresses)",
+        "no_proxy=example (single host)",
+        "no_proxy=example:80 (host + port)",
+        "no_proxy=sub.example (subdomain)",
+        "npm_config_*_proxy variables are unsupported"
+      ],
+      "goldPatchFiles": [
+        "README.md",
+        "index.js"
+      ]
+    },
+    "requiredTools": [
+      "read_file",
+      "edit_file"
+    ],
+    "maxSteps": 20,
+    "hiddenTests": [
+      {
+        "path": "test.js",
+        "ref": "e32b37e7df"
+      }
+    ]
+  },
+  {
+    "id": "pfe-drop-npm-config",
+    "prompt": "# `npm_config` env variables are preferred over `*_PROXY` env variables\n\nExpected behavior: `NO_PROXY` would override `npm_config_noproxy`\r\n\r\nActual behavior: `npm_config_noproxy`, if set, overrides `NO_PROXY`\r\n\r\nI see that this was discussed in #9 and @Rob--W [originally recommended](https://github.com/Rob--W/proxy-from-env/pull/9#issuecomment-593682966) the behavior expected in this issue.\r\n\r\nI believe this decision should be revisited, I think that it makes more sense for a generic program to prefer `NO_PROXY`, `HTTP_PROXY`, than it does for it to prefer NPM-specific environment variables. It's what programmers expect. \r\n\r\nMe assuming that the precedence would be `NO_PROXY > npm_config_noproxy` (like @Rob--W originally assumed in #9 ) has created a regression in our product: cypress-io/cypress#8287  Presumably more people will make this assumption, which will cause more regressions.\r\n\r\n---\r\n\r\nIf this behavior cannot be changed, it should at least be documented that the precedence is the opposite of what would be commonly expected. The README does not mention NPM config vars at all, and the changelog does not mention the precedence being inverted, which ended up being a breaking change for us.\n\n---\n以上是 Rob--W/proxy-from-env 仓库的真实 issue（#13）。请在该仓库中修复它。\n要求：不要修改任何测试文件；改完后运行测试确认通过。",
+    "category": "bug-fix",
+    "difficulty": "medium",
+    "provenance": {
+      "kind": "real-issue",
+      "repo": "Rob--W/proxy-from-env",
+      "baseCommit": "abefaff3a7641c0b856e553aba63f8557de4f967",
+      "fixCommit": "00ac7ff5c3",
+      "issueNumber": 13,
+      "issueUrl": "https://github.com/Rob--W/proxy-from-env/issues/13",
+      "collectedAt": "2026-10-04T09:14:45.990Z",
+      "modelCutoff": "2025-06-01",
+      "note": "真实 issue #13：npm_config_* 前缀的优先级问题，修复为不再支持该前缀。"
+    },
+    "setup": {
+      "testCommand": [
+        "node",
+        "--test"
+      ]
+    },
+    "verification": {
+      "mode": "tests",
+      "failToPass": [
+        "NPM proxy configuration",
+        "getProxyForUrl",
+        "getProxyForUrl(\"http://example\") === \"\"",
+        "getProxyForUrl(\"https://example\") === \"\"",
+        "npm_config_*_proxy variables are unsupported"
+      ],
+      "passToPass": [
+        "Invalid URLs",
+        "No proxy variables",
+        "all_proxy",
+        "all_proxy without scheme",
+        "difference between url.parse and WHATWG URL",
+        "ftp_proxy",
+        "getProxyForUrl(\"\") === \"\"",
+        "getProxyForUrl(\"//example.com\") === \"\"",
+        "getProxyForUrl(\"/path\") === \"\"",
+        "getProxyForUrl(\"://\") === \"\"",
+        "getProxyForUrl(\"://example.com\") === \"\"",
+        "getProxyForUrl(\"__proto__://\") === \"\"",
+        "getProxyForUrl(\"bogus\") === \"\"",
+        "getProxyForUrl(\"bogus-scheme://example\") === \"bogus-scheme://noscheme\"",
+        "getProxyForUrl(\"ftp://example\") === \"http://ftp-proxy\"",
+        "getProxyForUrl(\"ftp://example.com\") === \"\"",
+        "getProxyForUrl(\"ftp://xxx\") === \"\"",
+        "getProxyForUrl(\"ftp://xxx:1337\") === \"http://ftp\"",
+        "getProxyForUrl(\"ftp://xxx:21\") === \"\"",
+        "getProxyForUrl(\"ftps://example\") === \"\"",
+        "getProxyForUrl(\"gopher://xxx\") === \"\"",
+        "getProxyForUrl(\"gopher://xxx:1337\") === \"http://gopher\"",
+        "getProxyForUrl(\"gopher://xxx:70\") === \"\"",
+        "getProxyForUrl(\"hasOwnProperty://\") === \"\"",
+        "getProxyForUrl(\"http:\") === \"\"",
+        "getProxyForUrl(\"http:/\") === \"\"",
+        "getProxyForUrl(\"http://\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.1/\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.1:1337/\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.1:80/\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.2/\") === \"\"",
+        "getProxyForUrl(\"http://10.0.0.2:1337/\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://10.0.0.2:80/\") === \"\"",
+        "getProxyForUrl(\"http://127.0.0.1\") === \"\"",
+        "getProxyForUrl(\"http://127.0.0.1\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://127.0.0.1/32\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://XXX\") === \"\"",
+        "getProxyForUrl(\"http://YYY\") === \"\"",
+        "getProxyForUrl(\"http://ZzZ\") === \"\"",
+        "getProxyForUrl(\"http://[::1]/\") === \"\"",
+        "getProxyForUrl(\"http://[::1]:1337/\") === \"\"",
+        "getProxyForUrl(\"http://[::1]:80/\") === \"\"",
+        "getProxyForUrl(\"http://[::2]/\") === \"\"",
+        "getProxyForUrl(\"http://[::2]:1337/\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://[::2]:80/\") === \"\"",
+        "getProxyForUrl(\"http://a.b.example\") === \"\"",
+        "getProxyForUrl(\"http://a.b.example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://bad%\") === \"http://unexpected.proxy\"",
+        "getProxyForUrl(\"http://example\") === \"\"",
+        "getProxyForUrl(\"http://example\") === \"http://http-proxy\"",
+        "getProxyForUrl(\"http://example\") === \"http://noscheme\"",
+        "getProxyForUrl(\"http://example\") === \"http://priority\"",
+        "getProxyForUrl(\"http://example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example.com\") === \"\"",
+        "getProxyForUrl(\"http://example.no\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example.sub\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example:0\") === \"\"",
+        "getProxyForUrl(\"http://example:0\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example:1337\") === \"\"",
+        "getProxyForUrl(\"http://example:1337\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://example:80\") === \"\"",
+        "getProxyForUrl(\"http://example:80\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://host/example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://localhost\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://no.sub.example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://prefexample\") === \"\"",
+        "getProxyForUrl(\"http://prefexample\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://sub-example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://sub.example\") === \"\"",
+        "getProxyForUrl(\"http://sub.example\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://sub.example:1337\") === \"\"",
+        "getProxyForUrl(\"http://sub.example:80\") === \"\"",
+        "getProxyForUrl(\"http://wow\") === \"Crazy \\\\n!() { ::// }\"",
+        "getProxyForUrl(\"http://wow\") === \"http://crazy without colon slash slash\"",
+        "getProxyForUrl(\"http://x.prefexample\") === \"http://proxy\"",
+        "getProxyForUrl(\"http://xxx\") === \"\"",
+        "getProxyForUrl(\"http://xxx:1337\") === \"http://http\"",
+        "getProxyForUrl(\"http://xxx:80\") === \"\"",
+        "getProxyForUrl(\"http://yyy\") === \"\"",
+        "getProxyForUrl(\"http://zZz\") === \"\"",
+        "getProxyForUrl(\"https://example\") === \"\"",
+        "getProxyForUrl(\"https://example\") === \"http://catch-all\"",
+        "getProxyForUrl(\"https://example\") === \"http://https-proxy\"",
+        "getProxyForUrl(\"https://example\") === \"http://priority\"",
+        "getProxyForUrl(\"https://example\") === \"http://proxy\"",
+        "getProxyForUrl(\"https://example\") === \"https://noscheme\"",
+        "getProxyForUrl(\"https://example.com\") === \"\"",
+        "getProxyForUrl(\"https://xxx\") === \"\"",
+        "getProxyForUrl(\"https://xxx:1337\") === \"http://https\"",
+        "getProxyForUrl(\"https://xxx:443\") === \"\"",
+        "getProxyForUrl(\"prototype://\") === \"\"",
+        "getProxyForUrl(\"ws://xxx\") === \"\"",
+        "getProxyForUrl(\"ws://xxx:1337\") === \"http://ws\"",
+        "getProxyForUrl(\"ws://xxx:80\") === \"\"",
+        "getProxyForUrl(\"wss://xxx\") === \"\"",
+        "getProxyForUrl(\"wss://xxx:1337\") === \"http://wss\"",
+        "getProxyForUrl(\"wss://xxx:443\") === \"\"",
+        "getProxyForUrl(null) === \"\"",
+        "getProxyForUrl(undefined) === \"\"",
+        "getProxyForUrl({\"host\":\"x\",\"protocol\":1}) === \"\"",
+        "getProxyForUrl({\"host\":1,\"protocol\":\"x\"}) === \"\"",
+        "getProxyForUrl({\"protocol\":\"http:\",\"slashes\":true,\"auth\":null,\"host\":\"bad\",\"port\":null,\"hostname\":\"bad\",\"hash\":null,\"search\":null,\"query\":null,\"pathname\":\"%\",\"path\":\"%\",\"href\":\"http://bad/%\"}) === \"http://unexpected.proxy\"",
+        "getProxyForUrl({\"protocol\":\"http:\",\"slashes\":true,\"auth\":null,\"host\":\"example\",\"port\":null,\"hostname\":\"example\",\"hash\":null,\"search\":null,\"query\":null,\"pathname\":\"/\",\"path\":\"/\",\"href\":\"http://example/\"}) === \"http://http-proxy\"",
+        "getProxyForUrl({}) === \"\"",
+        "http_proxy and HTTP_PROXY",
+        "http_proxy with non-sensical value",
+        "https_proxy and HTTPS_PROXY",
+        "no_proxy empty",
+        "no_proxy should not be case-sensitive",
+        "no_proxy with protocols that have a default port",
+        "no_proxy=*",
+        "no_proxy=*.example (host suffix with *.)",
+        "no_proxy=*example (substring suffix)",
+        "no_proxy=.*example (arbitrary wildcards are NOT supported)",
+        "no_proxy=.example (host suffix)",
+        "no_proxy=127.0.0.1 does NOT match localhost",
+        "no_proxy=127.0.0.1/32 (CIDR is NOT supported)",
+        "no_proxy=[::1],[::2]:80,10.0.0.1,10.0.0.2:80 (IP addresses)",
+        "no_proxy=example (single host)",
+        "no_proxy=example:80 (host + port)",
+        "no_proxy=sub.example (subdomain)"
+      ],
+      "goldPatchFiles": [
+        "index.js"
+      ]
+    },
+    "requiredTools": [
+      "read_file",
+      "edit_file"
+    ],
+    "maxSteps": 20,
+    "hiddenTests": [
+      {
+        "path": "test.js",
+        "ref": "00ac7ff5c3"
+      }
+    ]
+  },
+  {
+    "id": "pfe-esm-migration",
+    "prompt": "# SyntaxError: The requested module 'proxy-from-env' does not provide an export named 'getProxyForUrl'\n\nI try to run a nft-marketplace demo by using 'proxy-from-env' module. But the problem is, when I run \"npm run dev\" on terminal, it gives an error information which is \"SyntaxError: The requested module 'proxy-from-env' does not provide an export named 'getProxyForUrl'\".\r\n\r\nAnd I found that there is really no export keyword for \"getproxyforurl\" function in \"index.js\" file, but I can find \"export function getProxyForUrl(url: string|Url): string;\" in \"index.d.ts\" file. \r\n\r\nIn fact, I am not good at javascript, and I don't know if this is the reason why my website is throwing this problem. Maybe I should add 'export' keyword before the 'function getProxyForUrl(url)' in \"index.js\" file.\n\n---\n以上是 Rob--W/proxy-from-env 仓库的真实 issue（#18）。请在该仓库中修复它。\n要求：不要修改任何测试文件；改完后运行测试确认通过。",
+    "category": "refactor",
+    "difficulty": "medium",
+    "provenance": {
+      "kind": "real-issue",
+      "repo": "Rob--W/proxy-from-env",
+      "baseCommit": "520d25a049c2f1424f9c5800b7582c3025807656",
+      "fixCommit": "7c0264eb15",
+      "issueNumber": 18,
+      "issueUrl": "https://github.com/Rob--W/proxy-from-env/issues/18",
+      "collectedAt": "2026-10-04T09:14:51.315Z",
+      "modelCutoff": "2025-06-01",
+      "note": "真实 issue #18：ESM 导入报错，修复为迁移到 ESM。PASS_TO_PASS 为 0（测试文件整体重写）。"
+    },
+    "setup": {
+      "testCommand": [
+        "node",
+        "--test"
+      ]
+    },
+    "verification": {
+      "mode": "tests",
+      "failToPass": [
+        "test.js"
+      ],
+      "passToPass": [],
+      "goldPatchFiles": [
+        "README.md",
+        "eslint.config.mjs",
+        "index.js",
+        "package.json"
+      ]
+    },
+    "requiredTools": [
+      "read_file",
+      "edit_file"
+    ],
+    "maxSteps": 20,
+    "hiddenTests": [
+      {
+        "path": "test.js",
+        "ref": "7c0264eb15"
+      }
+    ]
+  },
+  {
+    "id": "celjs-source-ranges",
+    "prompt": "# Add stable source ranges and structured diagnostics\n\nI would like `cel-js` to expose stable `{ start, end }` ranges on AST nodes and on parse/check errors.\n\nI would also like structured diagnostics or error payloads, for example:\n\n- `code`\n- `range`\n- `related`\n- a short user-facing message separate from the verbose context message\n\nEditor integrations currently need fragile range inference and message-string parsing from thrown errors. Stable ranges and machine-readable diagnostics would simplify linting, hover, and quick-fix UX.\n\n---\n以上是 marcbachmann/cel-js 仓库的真实 issue（#90）。请在该仓库中修复它。\n要求：不要修改任何测试文件；改完后运行测试确认通过。",
+    "category": "feature",
+    "difficulty": "hard",
+    "provenance": {
+      "kind": "real-issue",
+      "repo": "marcbachmann/cel-js",
+      "baseCommit": "5763f7c47208aa5c889c81b3d9ac57b893295b57",
+      "fixCommit": "0e8f13b102",
+      "issueNumber": 90,
+      "issueUrl": "https://github.com/marcbachmann/cel-js/issues/90",
+      "collectedAt": "2026-10-04T09:15:08.480Z",
+      "modelCutoff": "2025-06-01",
+      "note": "真实 issue #90：为 AST 节点加上稳定的 source range。跨 parser/AST 多文件改动。"
+    },
+    "setup": {
+      "testCommand": [
+        "node",
+        "--test"
+      ]
+    },
+    "verification": {
+      "mode": "tests",
+      "failToPass": [
+        "CEL Implementation Integration Tests",
+        "Source ranges",
+        "should handle parse errors gracefully",
+        "tracks stable ranges on AST nodes",
+        "tracks stable ranges on parse errors"
+      ],
+      "passToPass": [
+        "does not supports legacy argument format with functions",
+        "should demonstrate performance characteristics",
+        "should export all required functions and classes",
+        "should handle all data types correctly",
+        "should handle end-to-end complex expression",
+        "should handle evaluation errors",
+        "should work with parse function directly"
+      ],
+      "goldPatchFiles": [
+        "lib/parser.js"
+      ]
+    },
+    "requiredTools": [
+      "read_file",
+      "edit_file",
+      "run_tests"
+    ],
+    "maxSteps": 30,
+    "hiddenTests": [
+      {
+        "path": "test/index.test.js",
+        "ref": "0e8f13b102"
+      },
+      {
+        "path": "test/ranges.test.js",
+        "ref": "0e8f13b102"
+      }
+    ]
+  },
+  {
+    "id": "celjs-error-compat",
+    "prompt": "cel-js 的错误处理改动引入了一处**向后兼容回归**，并且导出的类型定义与实际行为不一致。\n具体现象：自定义类型注册、类型检查（type checking）以及属性访问（property access）相关的既有用法会失败。\n\n请定位问题并修复，使仓库现有测试全部通过。不要修改测试文件。",
+    "category": "bug-fix",
+    "difficulty": "hard",
+    "provenance": {
+      "kind": "real-commit",
+      "repo": "marcbachmann/cel-js",
+      "baseCommit": "b7c48fa8e3aba158dafc7fac1896f236555fc8ef",
+      "fixCommit": "1af976d8c4",
+      "collectedAt": "2026-10-04T09:15:28.050Z",
+      "modelCutoff": "2025-06-01",
+      "note": "无对应 issue，按改动范围中性改写。FAIL_TO_PASS=4，PASS_TO_PASS=106（回归面很大）。"
+    },
+    "setup": {
+      "testCommand": [
+        "node",
+        "--test"
+      ]
+    },
+    "verification": {
+      "mode": "tests",
+      "failToPass": [
+        "Custom Type Registration",
+        "Type Checker",
+        "property access",
+        "type checking"
+      ],
+      "passToPass": [
+        "Vector type",
+        "already-converted instances pass through",
+        "arithmetic operators with matching types",
+        "arithmetic operators with mixed int/double",
+        "basic fields-only registration",
+        "built-in function size()",
+        "built-in function string()",
+        "built-in method startsWith()",
+        "bytes type",
+        "comparison operators",
+        "comparison with incompatible types",
+        "complex expression",
+        "complex expressions",
+        "complex nested validation",
+        "custom convert function",
+        "custom function",
+        "custom function with wrong argument type",
+        "custom type operator overload using equality (against spec)",
+        "custom type property access",
+        "custom types",
+        "duration arithmetic",
+        "duration type",
+        "dyn operands with multiple list overloads still resolve to list<dyn>",
+        "dynamic type defines return type based on operator",
+        "dynamic type defines return type based on operator (multiple matches)",
+        "empty expression",
+        "empty fields object denies all access",
+        "equality operators support all types",
+        "error handling",
+        "error includes source position",
+        "field restrictions",
+        "function overloads",
+        "in operator rejects mismatched list element types",
+        "in operator rejects mismatched map key types",
+        "in operator with list",
+        "in operator with string",
+        "index access on list",
+        "index access with invalid index type",
+        "inheritance from built-in overloads",
+        "instance methods",
+        "invalid arithmetic (string + int)",
+        "list concatenation",
+        "list equality rejects mismatched element types",
+        "list index access",
+        "list index with dynamic variable",
+        "list literal allows mixed element types when explicitly disabled",
+        "list literal enforces homogeneous elements by default",
+        "list literal infers nested types after empty literal",
+        "list literal rejects mixing dyn elements with concrete ones",
+        "list literal still rejects mismatched nested types by default",
+        "literals",
+        "logical operators",
+        "logical operators with non-bool",
+        "macro functions",
+        "map index access",
+        "map literal accepts empty map as value together with more specific types",
+        "map literal accepts mixed key types when wrapped with dyn",
+        "map literal accepts mixed value types when wrapped with dyn",
+        "map literal allows mixed key types when explicitly disabled",
+        "map literal allows mixed value types when explicitly disabled",
+        "map literal enforces homogeneous key types by default",
+        "map literal enforces homogeneous value types by default",
+        "map literal rejects mixed types",
+        "map macro requires identifier",
+        "map macro with three-arg form",
+        "map operations with custom types",
+        "method chaining",
+        "method chaining on custom types",
+        "method on wrong type",
+        "mixed with built-in types",
+        "multiple accesses use cached conversion",
+        "multiple custom types",
+        "nested custom types",
+        "nested expressions",
+        "nested type conversion",
+        "no field restrictions when fields not specified",
+        "parse errors are caught",
+        "predicate macro validation with string lists",
+        "predicate macro validation with typed lists",
+        "predicate macro with dynamic types",
+        "predicate macro with invalid variable",
+        "predicate macro with map types",
+        "property access on invalid type",
+        "property access on map",
+        "registerType with fields only (no constructor)",
+        "registering new overload invalidates cached lookup results",
+        "runtime field type validation",
+        "string concatenation",
+        "string indexing is not supported",
+        "string indexing not supported",
+        "ternary operator",
+        "ternary with different branch types",
+        "ternary with incompatible branch types",
+        "ternary with non-bool condition",
+        "timestamp and duration arithmetic",
+        "timestamp type",
+        "type checking with wrong constructor",
+        "type validation in function return",
+        "uint type support",
+        "unary minus",
+        "unary minus on invalid type",
+        "undeclared field rejected at runtime",
+        "unknown function",
+        "unknown variable",
+        "valid variable references",
+        "with functions"
+      ],
+      "goldPatchFiles": [
+        "lib/errors.js",
+        "lib/index.d.ts"
+      ]
+    },
+    "requiredTools": [
+      "read_file",
+      "edit_file",
+      "run_tests"
+    ],
+    "maxSteps": 30,
+    "hiddenTests": [
+      {
+        "path": "test/custom-types.test.js",
+        "ref": "1af976d8c4"
+      },
+      {
+        "path": "test/type-checker.test.js",
+        "ref": "1af976d8c4"
+      }
+    ]
+  },
+  {
+    "id": "celjs-diagnostics",
+    "prompt": "cel-js 的错误对象目前信息不足：调用方拿不到结构化的诊断信息，\n也无法在求值失败时把 AST 位置信息带上。\n\n请实现结构化诊断：让错误可以携带诊断元数据，并在运行时求值错误上附加 AST 元数据，\n同时保留普通对象形式的 cause。完成后仓库测试应当全部通过，不要修改测试文件。",
+    "category": "feature",
+    "difficulty": "hard",
+    "provenance": {
+      "kind": "real-commit",
+      "repo": "marcbachmann/cel-js",
+      "baseCommit": "849b341eb909a0032d4af0ef9bb62e0de2da0d24",
+      "fixCommit": "795b6929b5",
+      "collectedAt": "2026-10-04T09:15:45.616Z",
+      "modelCutoff": "2025-06-01",
+      "note": "无对应 issue，中性改写自提交范围。FAIL_TO_PASS=7。"
+    },
+    "setup": {
+      "testCommand": [
+        "node",
+        "--test"
+      ]
+    },
+    "verification": {
+      "mode": "tests",
+      "failToPass": [
+        "Structured diagnostics",
+        "accepts unambiguous error option bags",
+        "attaches AST metadata to runtime evaluation errors",
+        "preserves plain-object causes on evaluation errors",
+        "returns an empty diagnostics list on successful checks",
+        "returns machine-readable diagnostics from check()",
+        "surfaces parse diagnostics through check()"
+      ],
+      "passToPass": [],
+      "goldPatchFiles": [
+        "lib/errors.js",
+        "lib/evaluator.js",
+        "lib/index.d.ts"
+      ]
+    },
+    "requiredTools": [
+      "read_file",
+      "edit_file",
+      "run_tests"
+    ],
+    "maxSteps": 30,
+    "hiddenTests": [
+      {
+        "path": "test/diagnostics.test.js",
+        "ref": "795b6929b5"
+      }
+    ]
+  }
+]

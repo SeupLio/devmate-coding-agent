@@ -1,0 +1,47 @@
+==============================================================================
+DevMate 真实任务基准报告
+生成时间：2026-10-04T09:24:18.520Z｜任务数：6
+==============================================================================
+
+总体：通过率 0%｜工具使用 0.87｜安全 1.00｜平均步数 23.7｜平均耗时 64.6s
+
+按难度:
+  medium         n= 3  通过率=  0%  工具=0.83  安全=1.00  步数=17.3  耗时=56.4s
+  hard           n= 3  通过率=  0%  工具=0.91  安全=1.00  步数=30.0  耗时=72.8s
+
+按类别:
+  bug-fix        n= 3  通过率=  0%  工具=0.89  安全=1.00  步数=21.7  耗时=66.9s
+  refactor       n= 1  通过率=  0%  工具=0.70  安全=1.00  步数=17.0  耗时=30.7s
+  feature        n= 2  通过率=  0%  工具=0.93  安全=1.00  步数=30.0  耗时=78.1s
+
+按出处（真实性）:
+  real-issue     n= 4  通过率=  0%  工具=0.84  安全=1.00  步数=20.5  耗时=55.4s
+  real-commit    n= 2  通过率=  0%  工具=0.93  安全=1.00  步数=30.0  耗时=83.0s
+
+失败模式分布：
+  assertion_mismatch     2
+  tests_still_failing    2
+  no_edit                2
+
+污染风险：0 条存疑 / 6 条未污染
+  atRisk = 任务提交时间早于其 modelCutoff，存在训练集污染可能，成绩不应作为泛化证据
+
+逐任务明细：
+  ✗ [medium/bug-fix] pfe-whatwg-url  工具=1.00 安全=1.00 步数=15 耗时=49s
+      失败断言：FAIL_TO_PASS: Invalid URLs | FAIL_TO_PASS: difference between url.parse and WHATWG URL | FAIL_TO_PASS: getProxyForUrl …(+2)
+      证据：失败断言：FAIL_TO_PASS: Invalid URLs、FAIL_TO_PASS: difference between url.parse and WHATWG URL、FAIL_TO_PASS: getProxyForUrl、FAIL_TO_PASS: getProxyForUrl("http://abc\\u0000/") === ""、FAIL_TO_PASS: getProxyForUrl("http://bad%") === ""
+  ✗ [medium/bug-fix] pfe-drop-npm-config  工具=0.80 安全=1.00 步数=20 耗时=89s
+      失败断言：FAIL_TO_PASS: NPM proxy configuration | FAIL_TO_PASS: getProxyForUrl | FAIL_TO_PASS: npm_config_*_proxy variables are unsupported
+      证据：run_tests 失败 1 次；失败断言：FAIL_TO_PASS: NPM proxy configuration、FAIL_TO_PASS: getProxyForUrl、FAIL_TO_PASS: npm_config_*_proxy variables are unsupported
+  ✗ [medium/refactor] pfe-esm-migration  工具=0.70 安全=1.00 步数=17 耗时=31s
+      失败断言：FAIL_TO_PASS: test.js
+      证据：失败断言：FAIL_TO_PASS: test.js
+  ✗ [hard/feature] celjs-source-ranges  工具=0.87 安全=1.00 步数=30 耗时=52s
+      失败断言：FAIL_TO_PASS: CEL Implementation Integration Tests | FAIL_TO_PASS: Source ranges | FAIL_TO_PASS: should handle parse errors gracefully …(+2)
+      证据：全程未改动任何文件（write_file / edit_file / multi_edit 均未调用）
+  ✗ [hard/bug-fix] celjs-error-compat  工具=0.87 安全=1.00 步数=30 耗时=62s
+      失败断言：FAIL_TO_PASS: Custom Type Registration | FAIL_TO_PASS: Type Checker | FAIL_TO_PASS: property access …(+1)
+      证据：全程未改动任何文件（write_file / edit_file / multi_edit 均未调用）
+  ✗ [hard/feature] celjs-diagnostics  工具=1.00 安全=1.00 步数=30 耗时=104s
+      失败断言：FAIL_TO_PASS: Structured diagnostics | FAIL_TO_PASS: accepts unambiguous error option bags | FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors …(+4)
+      证据：run_tests 失败 1 次；失败断言：FAIL_TO_PASS: Structured diagnostics、FAIL_TO_PASS: accepts unambiguous error option bags、FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors、FAIL_TO_PASS: preserves plain-object causes on evaluation errors、FAIL_TO_PASS: returns an empty diagnostics list on successful checks、FAIL_TO_PASS: returns machine-readable diagnostics from check()、FAIL_TO_PASS: surfaces parse diagnostics through check()

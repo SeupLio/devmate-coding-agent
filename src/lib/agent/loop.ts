@@ -145,6 +145,8 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     const activeTools = filterTools(opts.toolFilter)
     const useCompression = opts.useCompression !== false
     const chatOpts = { enableThinking: opts.thinking }
+    /** 步数将尽时只提醒一次，避免每步都注入消息 */
+    let nudgedLowBudget = false
 
     const messages: ChatMessageParam[] = [
       { role: 'system', content: buildSystemPrompt(sessionId) },
@@ -192,6 +194,19 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
               compressedCount: compressed.compressedCount,
             })
           }
+        }
+
+        // 预算感知：步数将尽时提醒模型「先落地改动」。
+        // 真实任务基准实测：主要失败模式是 no_edit —— 步数全花在探索上，一次文件都没改。
+        const remaining = maxSteps - step
+        if (remaining <= 4 && remaining > 0 && !nudgedLowBudget) {
+          nudgedLowBudget = true
+          messages.push({
+            role: 'user',
+            content:
+              `[系统提醒] 剩余步数仅 ${remaining} 步。请立刻把已确定的修改写入文件`
+              + `（edit_file / multi_edit / write_file），然后调用 run_tests 验证；不要再继续探索。`,
+          })
         }
 
         // token 实时流式推入队列（与工具事件交织）

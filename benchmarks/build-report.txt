@@ -1,0 +1,24 @@
+DevMate 真实任务构建报告  2026-10-04T09:14:37.631Z
+======================================================================
+
+✓ pfe-whatwg-url  [real-issue] Rob--W/proxy-from-env@00ac7ff5c3
+    FAIL_TO_PASS(5): Invalid URLs | difference between url.parse and WHATWG URL | getProxyForUrl | getProxyForUrl("http://abc\\u0000/") === "" | getProxyForUrl("http://bad%") === ""
+    PASS_TO_PASS(120): NPM proxy configuration | No proxy variables | all_proxy | all_proxy without scheme…
+✓ pfe-drop-npm-config  [real-issue] Rob--W/proxy-from-env@abefaff3a7
+    FAIL_TO_PASS(5): NPM proxy configuration | getProxyForUrl | getProxyForUrl("http://example") === "" | getProxyForUrl("https://example") === "" | npm_config_*_proxy variables are unsupported
+    PASS_TO_PASS(121): Invalid URLs | No proxy variables | all_proxy | all_proxy without scheme…
+✓ pfe-esm-migration  [real-issue] Rob--W/proxy-from-env@520d25a049
+    FAIL_TO_PASS(1): test.js
+    PASS_TO_PASS(0)
+✓ celjs-source-ranges  [real-issue] marcbachmann/cel-js@5763f7c472
+    FAIL_TO_PASS(5): CEL Implementation Integration Tests | Source ranges | should handle parse errors gracefully | tracks stable ranges on AST nodes | tracks stable ranges on parse errors
+    PASS_TO_PASS(7): does not supports legacy argument format with functions | should demonstrate performance characteristics | should export all required functions and classes | should handle all data types correctly…
+✓ celjs-error-compat  [real-commit] marcbachmann/cel-js@b7c48fa8e3
+    FAIL_TO_PASS(4): Custom Type Registration | Type Checker | property access | type checking
+    PASS_TO_PASS(106): Vector type | already-converted instances pass through | arithmetic operators with matching types | arithmetic operators with mixed int/double…
+✓ celjs-diagnostics  [real-commit] marcbachmann/cel-js@849b341eb9
+    FAIL_TO_PASS(7): Structured diagnostics | accepts unambiguous error option bags | attaches AST metadata to runtime evaluation errors | preserves plain-object causes on evaluation errors | returns an empty diagnostics list on successful checks | returns machine-readable diagnostics from check()
+    PASS_TO_PASS(0)
+
+======================================================================
+收录 6/6 个任务 → benchmarks/real-tasks.json

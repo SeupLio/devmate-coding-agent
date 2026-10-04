@@ -14,6 +14,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { safeResolve, sessionDir } from './workspace'
 import {
@@ -81,6 +82,34 @@ function listAllFiles(dir: string, base = ''): string[] {
 function countOccurrences(haystack: string, needle: string): number {
   if (!needle) return 0
   return haystack.split(needle).length - 1
+}
+
+/**
+ * 重复读取抑制。
+ *
+ * 真实仓库任务里观察到 Agent 会**反复读取同一文件的同一区间**
+ * （实测一次 30 步的任务里把 lib/parser.js 读了 8 遍，最后耗尽步数还没改完）。
+ * 这里记录「会话 + 文件 + 行区间 → 内容摘要 + 读取序号」，
+ * 若同一区间在**最近 N 次工具调用内**读到完全相同的内容，就不再重复返回全文。
+ *
+ * 只压制「近期重复」是刻意的：如果早先的结果已被上下文压缩掉，
+ * 再读时应当正常返回全文，否则 Agent 会永久丢失这段内容。
+ */
+const RECENT_READ_WINDOW = 6
+let toolSeq = 0
+const readCache = new Map<string, Map<string, { digest: string; seq: number }>>()
+
+function suppressDuplicateRead(sessionId: string, key: string, digest: string): boolean {
+  toolSeq++
+  let cache = readCache.get(sessionId)
+  if (!cache) {
+    cache = new Map()
+    readCache.set(sessionId, cache)
+  }
+  const prev = cache.get(key)
+  const isDup = Boolean(prev && prev.digest === digest && toolSeq - prev.seq <= RECENT_READ_WINDOW)
+  cache.set(key, { digest, seq: toolSeq })
+  return isDup
 }
 
 /** 校验并归一化 todo 列表（供 executeTool 与 loop 的事件发射共用） */
@@ -458,6 +487,11 @@ export async function executeTool(
         end < lines.length
           ? `\n...[共 ${lines.length} 行，已显示 ${start + 1}-${end}；可用 offset/limit 继续]`
           : ''
+      // 同一区间刚刚读过且内容没变 → 不重复返回，省下上下文与步数
+      const digest = createHash('sha1').update(numbered).digest('hex')
+      if (suppressDuplicateRead(ctx.sessionId, `${args.path}:${start}:${end}`, digest)) {
+        return `(重复读取：${args.path} 第 ${start + 1}-${end} 行与刚才读到的内容完全一致，不再重复返回。请直接基于已读内容继续，或用 grep/search_ast 精确定位。)`
+      }
       return numbered + tail
     }
     case 'edit_file': {

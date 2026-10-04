@@ -15,3 +15,6 @@ next-env.d.ts
 
 # TS 增量编译缓存
 *.tsbuildinfo
+
+# 真实任务基准的解压工作区（构建缓存，不入库）
+benchmarks/_work/
