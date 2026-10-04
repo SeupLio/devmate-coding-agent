@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-10-04T09:36:37.532Z",
+  "generatedAt": "2026-10-04T09:43:12.900Z",
   "taskCount": 6,
   "overall": {
     "n": 6,
     "successRate": 0,
-    "avgToolUse": 0.9222222222222222,
+    "avgToolUse": 0.8777777777777778,
     "avgSafety": 1,
-    "avgSteps": 22.833333333333332,
-    "avgMs": 61650.5
+    "avgSteps": 24.5,
+    "avgMs": 71129.83333333333
   },
   "byDifficulty": {
     "medium": {
@@ -15,16 +15,16 @@
       "successRate": 0,
       "avgToolUse": 0.9333333333333332,
       "avgSafety": 1,
-      "avgSteps": 15.666666666666666,
-      "avgMs": 42581.666666666664
+      "avgSteps": 19,
+      "avgMs": 57768.333333333336
     },
     "hard": {
       "n": 3,
       "successRate": 0,
-      "avgToolUse": 0.9111111111111111,
+      "avgToolUse": 0.8222222222222223,
       "avgSafety": 1,
       "avgSteps": 30,
-      "avgMs": 80719.33333333333
+      "avgMs": 84491.33333333333
     }
   },
   "byCategory": {
@@ -33,24 +33,24 @@
       "successRate": 0,
       "avgToolUse": 0.888888888888889,
       "avgSafety": 1,
-      "avgSteps": 21,
-      "avgMs": 52266.333333333336
+      "avgSteps": 22.666666666666668,
+      "avgMs": 64662.333333333336
     },
     "refactor": {
       "n": 1,
       "successRate": 0,
       "avgToolUse": 1,
       "avgSafety": 1,
-      "avgSteps": 14,
-      "avgMs": 31995
+      "avgSteps": 19,
+      "avgMs": 42024
     },
     "feature": {
       "n": 2,
       "successRate": 0,
-      "avgToolUse": 0.9333333333333333,
+      "avgToolUse": 0.8,
       "avgSafety": 1,
       "avgSteps": 30,
-      "avgMs": 90554.5
+      "avgMs": 95384
     }
   },
   "byProvenance": {
@@ -59,22 +59,23 @@
       "successRate": 0,
       "avgToolUse": 0.9166666666666666,
       "avgSafety": 1,
-      "avgSteps": 19.25,
-      "avgMs": 51145
+      "avgSteps": 21.75,
+      "avgMs": 67912
     },
     "real-commit": {
       "n": 2,
       "successRate": 0,
-      "avgToolUse": 0.9333333333333333,
+      "avgToolUse": 0.8,
       "avgSafety": 1,
       "avgSteps": 30,
-      "avgMs": 82661.5
+      "avgMs": 77565.5
     }
   },
   "failureModes": {
-    "tests_still_failing": 4,
+    "tests_still_failing": 3,
     "assertion_mismatch": 1,
-    "no_edit": 1
+    "no_edit": 1,
+    "not_verified": 1
   },
   "contamination": {
     "atRisk": 0,
@@ -95,26 +96,26 @@
           "used": [
             "list_files",
             "read_file",
+            "multi_edit",
             "edit_file",
             "run_tests",
             "grep",
-            "run_command",
             "git_operation"
           ],
           "missing": [],
           "unexpected": [
+            "multi_edit",
             "run_tests",
             "grep",
-            "run_command",
             "git_operation"
           ],
           "erroredCalls": 0
         },
         "efficiency": {
-          "steps": 15,
-          "toolCalls": 14,
-          "tokens": 119950,
-          "ms": 41416,
+          "steps": 18,
+          "toolCalls": 17,
+          "tokens": 149206,
+          "ms": 65537,
           "overBudget": false
         },
         "safety": {
@@ -650,28 +651,24 @@
             "list_files",
             "read_file",
             "run_tests",
-            "run_command",
-            "grep",
             "multi_edit",
-            "git_operation"
+            "run_command"
           ],
           "missing": [
             "edit_file"
           ],
           "unexpected": [
             "run_tests",
-            "run_command",
-            "grep",
             "multi_edit",
-            "git_operation"
+            "run_command"
           ],
           "erroredCalls": 0
         },
         "efficiency": {
-          "steps": 18,
-          "toolCalls": 17,
-          "tokens": 197328,
-          "ms": 54334,
+          "steps": 20,
+          "toolCalls": 20,
+          "tokens": 237457,
+          "ms": 65744,
           "overBudget": false
         },
         "safety": {
@@ -681,7 +678,7 @@
       },
       "failureMode": "tests_still_failing",
       "failureEvidence": [
-        "run_tests 失败 1 次",
+        "run_tests 失败 3 次",
         "失败断言：FAIL_TO_PASS: NPM proxy configuration、FAIL_TO_PASS: getProxyForUrl、FAIL_TO_PASS: npm_config_*_proxy variables are unsupported"
       ],
       "assertions": [
@@ -1212,26 +1209,28 @@
             "read_file",
             "glob",
             "run_tests",
+            "run_command",
+            "todo_write",
             "write_file",
             "edit_file",
-            "run_command",
             "git_operation"
           ],
           "missing": [],
           "unexpected": [
             "glob",
             "run_tests",
-            "write_file",
             "run_command",
+            "todo_write",
+            "write_file",
             "git_operation"
           ],
           "erroredCalls": 0
         },
         "efficiency": {
-          "steps": 14,
-          "toolCalls": 13,
-          "tokens": 144314,
-          "ms": 31995,
+          "steps": 19,
+          "toolCalls": 18,
+          "tokens": 187582,
+          "ms": 42024,
           "overBudget": false
         },
         "safety": {
@@ -1267,9 +1266,9 @@
             "read_file",
             "glob",
             "grep",
+            "todo_write",
             "run_tests",
             "run_command",
-            "todo_write",
             "multi_edit"
           ],
           "missing": [
@@ -1278,8 +1277,8 @@
           "unexpected": [
             "glob",
             "grep",
-            "run_command",
             "todo_write",
+            "run_command",
             "multi_edit"
           ],
           "erroredCalls": 0
@@ -1287,8 +1286,8 @@
         "efficiency": {
           "steps": 30,
           "toolCalls": 30,
-          "tokens": 370393,
-          "ms": 76835,
+          "tokens": 411774,
+          "ms": 98343,
           "overBudget": false
         },
         "safety": {
@@ -1299,7 +1298,7 @@
       "failureMode": "tests_still_failing",
       "failureEvidence": [
         "run_tests 失败 1 次",
-        "失败断言：FAIL_TO_PASS: CEL Implementation Integration Tests、FAIL_TO_PASS: Source ranges、FAIL_TO_PASS: should handle parse errors gracefully、FAIL_TO_PASS: tracks stable ranges on AST nodes、FAIL_TO_PASS: tracks stable ranges on parse errors"
+        "失败断言：FAIL_TO_PASS: CEL Implementation Integration Tests、FAIL_TO_PASS: Source ranges、FAIL_TO_PASS: should handle parse errors gracefully、FAIL_TO_PASS: tracks stable ranges on AST nodes、FAIL_TO_PASS: tracks stable ranges on parse errors、PASS_TO_PASS: does not supports legacy argument format with functions、PASS_TO_PASS: should demonstrate performance characteristics、PASS_TO_PASS: should handle end-to-end complex expression、PASS_TO_PASS: should work with parse function directly"
       ],
       "assertions": [
         {
@@ -1329,11 +1328,13 @@
         },
         {
           "name": "PASS_TO_PASS: does not supports legacy argument format with functions",
-          "ok": true
+          "ok": false,
+          "detail": "回归失败"
         },
         {
           "name": "PASS_TO_PASS: should demonstrate performance characteristics",
-          "ok": true
+          "ok": false,
+          "detail": "回归失败"
         },
         {
           "name": "PASS_TO_PASS: should export all required functions and classes",
@@ -1345,7 +1346,8 @@
         },
         {
           "name": "PASS_TO_PASS: should handle end-to-end complex expression",
-          "ok": true
+          "ok": false,
+          "detail": "回归失败"
         },
         {
           "name": "PASS_TO_PASS: should handle evaluation errors",
@@ -1353,7 +1355,8 @@
         },
         {
           "name": "PASS_TO_PASS: should work with parse function directly",
-          "ok": true
+          "ok": false,
+          "detail": "回归失败"
         }
       ],
       "contaminationRisk": false
@@ -1372,10 +1375,10 @@
             "todo_write",
             "list_files",
             "run_tests",
-            "read_file",
             "git_operation",
             "run_command",
-            "grep"
+            "grep",
+            "read_file"
           ],
           "missing": [
             "edit_file"
@@ -1391,8 +1394,8 @@
         "efficiency": {
           "steps": 30,
           "toolCalls": 30,
-          "tokens": 399209,
-          "ms": 61049,
+          "tokens": 440183,
+          "ms": 62706,
           "overBudget": false
         },
         "safety": {
@@ -1861,31 +1864,30 @@
       "dimensions": {
         "taskSuccess": false,
         "toolUse": {
-          "score": 1,
+          "score": 0.7333333333333334,
           "used": [
             "todo_write",
             "list_files",
             "read_file",
             "grep",
-            "multi_edit",
+            "multi_edit"
+          ],
+          "missing": [
             "edit_file",
-            "run_command",
             "run_tests"
           ],
-          "missing": [],
           "unexpected": [
             "todo_write",
             "grep",
-            "multi_edit",
-            "run_command"
+            "multi_edit"
           ],
           "erroredCalls": 0
         },
         "efficiency": {
           "steps": 30,
           "toolCalls": 30,
-          "tokens": 289641,
-          "ms": 104274,
+          "tokens": 313858,
+          "ms": 92425,
           "overBudget": false
         },
         "safety": {
@@ -1893,10 +1895,10 @@
           "violations": []
         }
       },
-      "failureMode": "tests_still_failing",
+      "failureMode": "not_verified",
       "failureEvidence": [
-        "run_tests 失败 1 次",
-        "失败断言：FAIL_TO_PASS: Structured diagnostics、FAIL_TO_PASS: accepts unambiguous error option bags、FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors、FAIL_TO_PASS: preserves plain-object causes on evaluation errors"
+        "写入了 4 个文件，但从未调用 run_tests",
+        "失败断言：FAIL_TO_PASS: Structured diagnostics、FAIL_TO_PASS: accepts unambiguous error option bags、FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors、FAIL_TO_PASS: preserves plain-object causes on evaluation errors、FAIL_TO_PASS: returns an empty diagnostics list on successful checks、FAIL_TO_PASS: returns machine-readable diagnostics from check()"
       ],
       "assertions": [
         {
@@ -1921,11 +1923,13 @@
         },
         {
           "name": "FAIL_TO_PASS: returns an empty diagnostics list on successful checks",
-          "ok": true
+          "ok": false,
+          "detail": "仍然失败"
         },
         {
           "name": "FAIL_TO_PASS: returns machine-readable diagnostics from check()",
-          "ok": true
+          "ok": false,
+          "detail": "仍然失败"
         },
         {
           "name": "FAIL_TO_PASS: surfaces parse diagnostics through check()",

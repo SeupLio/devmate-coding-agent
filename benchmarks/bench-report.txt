@@ -1,47 +1,48 @@
 ==============================================================================
 DevMate 真实任务基准报告
-生成时间：2026-10-04T09:36:37.532Z｜任务数：6
+生成时间：2026-10-04T09:43:12.900Z｜任务数：6
 ==============================================================================
 
-总体：通过率 0%｜工具使用 0.92｜安全 1.00｜平均步数 22.8｜平均耗时 61.7s
+总体：通过率 0%｜工具使用 0.88｜安全 1.00｜平均步数 24.5｜平均耗时 71.1s
 
 按难度:
-  medium         n= 3  通过率=  0%  工具=0.93  安全=1.00  步数=15.7  耗时=42.6s
-  hard           n= 3  通过率=  0%  工具=0.91  安全=1.00  步数=30.0  耗时=80.7s
+  medium         n= 3  通过率=  0%  工具=0.93  安全=1.00  步数=19.0  耗时=57.8s
+  hard           n= 3  通过率=  0%  工具=0.82  安全=1.00  步数=30.0  耗时=84.5s
 
 按类别:
-  bug-fix        n= 3  通过率=  0%  工具=0.89  安全=1.00  步数=21.0  耗时=52.3s
-  refactor       n= 1  通过率=  0%  工具=1.00  安全=1.00  步数=14.0  耗时=32.0s
-  feature        n= 2  通过率=  0%  工具=0.93  安全=1.00  步数=30.0  耗时=90.6s
+  bug-fix        n= 3  通过率=  0%  工具=0.89  安全=1.00  步数=22.7  耗时=64.7s
+  refactor       n= 1  通过率=  0%  工具=1.00  安全=1.00  步数=19.0  耗时=42.0s
+  feature        n= 2  通过率=  0%  工具=0.80  安全=1.00  步数=30.0  耗时=95.4s
 
 按出处（真实性）:
-  real-issue     n= 4  通过率=  0%  工具=0.92  安全=1.00  步数=19.3  耗时=51.1s
-  real-commit    n= 2  通过率=  0%  工具=0.93  安全=1.00  步数=30.0  耗时=82.7s
+  real-issue     n= 4  通过率=  0%  工具=0.92  安全=1.00  步数=21.8  耗时=67.9s
+  real-commit    n= 2  通过率=  0%  工具=0.80  安全=1.00  步数=30.0  耗时=77.6s
 
 失败模式分布：
-  tests_still_failing    4
+  tests_still_failing    3
   assertion_mismatch     1
   no_edit                1
+  not_verified           1
 
 污染风险：0 条存疑 / 6 条未污染
   atRisk = 任务提交时间早于其 modelCutoff，存在训练集污染可能，成绩不应作为泛化证据
 
 逐任务明细：
-  ✗ [medium/bug-fix] pfe-whatwg-url  工具=1.00 安全=1.00 步数=15 耗时=41s
+  ✗ [medium/bug-fix] pfe-whatwg-url  工具=1.00 安全=1.00 步数=18 耗时=66s
       失败断言：FAIL_TO_PASS: Invalid URLs | FAIL_TO_PASS: difference between url.parse and WHATWG URL | FAIL_TO_PASS: getProxyForUrl …(+2)
       证据：run_tests 失败 1 次；失败断言：FAIL_TO_PASS: Invalid URLs、FAIL_TO_PASS: difference between url.parse and WHATWG URL、FAIL_TO_PASS: getProxyForUrl、FAIL_TO_PASS: getProxyForUrl("http://abc\\u0000/") === ""、FAIL_TO_PASS: getProxyForUrl("http://bad%") === ""
-  ✗ [medium/bug-fix] pfe-drop-npm-config  工具=0.80 安全=1.00 步数=18 耗时=54s
+  ✗ [medium/bug-fix] pfe-drop-npm-config  工具=0.80 安全=1.00 步数=20 耗时=66s
       失败断言：FAIL_TO_PASS: NPM proxy configuration | FAIL_TO_PASS: getProxyForUrl | FAIL_TO_PASS: npm_config_*_proxy variables are unsupported
-      证据：run_tests 失败 1 次；失败断言：FAIL_TO_PASS: NPM proxy configuration、FAIL_TO_PASS: getProxyForUrl、FAIL_TO_PASS: npm_config_*_proxy variables are unsupported
-  ✗ [medium/refactor] pfe-esm-migration  工具=1.00 安全=1.00 步数=14 耗时=32s
+      证据：run_tests 失败 3 次；失败断言：FAIL_TO_PASS: NPM proxy configuration、FAIL_TO_PASS: getProxyForUrl、FAIL_TO_PASS: npm_config_*_proxy variables are unsupported
+  ✗ [medium/refactor] pfe-esm-migration  工具=1.00 安全=1.00 步数=19 耗时=42s
       失败断言：FAIL_TO_PASS: test.js
       证据：失败断言：FAIL_TO_PASS: test.js
-  ✗ [hard/feature] celjs-source-ranges  工具=0.87 安全=1.00 步数=30 耗时=77s
-      失败断言：FAIL_TO_PASS: CEL Implementation Integration Tests | FAIL_TO_PASS: Source ranges | FAIL_TO_PASS: should handle parse errors gracefully …(+2)
-      证据：run_tests 失败 1 次；失败断言：FAIL_TO_PASS: CEL Implementation Integration Tests、FAIL_TO_PASS: Source ranges、FAIL_TO_PASS: should handle parse errors gracefully、FAIL_TO_PASS: tracks stable ranges on AST nodes、FAIL_TO_PASS: tracks stable ranges on parse errors
-  ✗ [hard/bug-fix] celjs-error-compat  工具=0.87 安全=1.00 步数=30 耗时=61s
+  ✗ [hard/feature] celjs-source-ranges  工具=0.87 安全=1.00 步数=30 耗时=98s
+      失败断言：FAIL_TO_PASS: CEL Implementation Integration Tests | FAIL_TO_PASS: Source ranges | FAIL_TO_PASS: should handle parse errors gracefully …(+6)
+      证据：run_tests 失败 1 次；失败断言：FAIL_TO_PASS: CEL Implementation Integration Tests、FAIL_TO_PASS: Source ranges、FAIL_TO_PASS: should handle parse errors gracefully、FAIL_TO_PASS: tracks stable ranges on AST nodes、FAIL_TO_PASS: tracks stable ranges on parse errors、PASS_TO_PASS: does not supports legacy argument format with functions、PASS_TO_PASS: should demonstrate performance characteristics、PASS_TO_PASS: should handle end-to-end complex expression、PASS_TO_PASS: should work with parse function directly
+  ✗ [hard/bug-fix] celjs-error-compat  工具=0.87 安全=1.00 步数=30 耗时=63s
       失败断言：FAIL_TO_PASS: Custom Type Registration | FAIL_TO_PASS: Type Checker | FAIL_TO_PASS: property access …(+1)
       证据：全程未改动任何文件（write_file / edit_file / multi_edit 均未调用）
-  ✗ [hard/feature] celjs-diagnostics  工具=1.00 安全=1.00 步数=30 耗时=104s
-      失败断言：FAIL_TO_PASS: Structured diagnostics | FAIL_TO_PASS: accepts unambiguous error option bags | FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors …(+1)
-      证据：run_tests 失败 1 次；失败断言：FAIL_TO_PASS: Structured diagnostics、FAIL_TO_PASS: accepts unambiguous error option bags、FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors、FAIL_TO_PASS: preserves plain-object causes on evaluation errors
+  ✗ [hard/feature] celjs-diagnostics  工具=0.73 安全=1.00 步数=30 耗时=92s
+      失败断言：FAIL_TO_PASS: Structured diagnostics | FAIL_TO_PASS: accepts unambiguous error option bags | FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors …(+3)
+      证据：写入了 4 个文件，但从未调用 run_tests；失败断言：FAIL_TO_PASS: Structured diagnostics、FAIL_TO_PASS: accepts unambiguous error option bags、FAIL_TO_PASS: attaches AST metadata to runtime evaluation errors、FAIL_TO_PASS: preserves plain-object causes on evaluation errors、FAIL_TO_PASS: returns an empty diagnostics list on successful checks、FAIL_TO_PASS: returns machine-readable diagnostics from check()
