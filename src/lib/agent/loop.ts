@@ -8,6 +8,7 @@
  */
 import { chatStream, estimateTokens, type ChatMessageParam } from './llm'
 import { executeTool, filterTools, normalizeTodos, type TodoItem } from './tools'
+import { callMcpTool, getMcpReadOnlySet, getMcpToolDefs, isMcpToolName } from './mcp-registry'
 import { compressContext } from './context'
 import { AGENT_SYSTEM_PROMPT, PLAN_SYSTEM_PROMPT } from './prompts'
 import { readProjectMemory } from './workspace'
@@ -133,6 +134,47 @@ export function needsPlan(task: string): boolean {
   return /[；;]|并且|同时|分别|依次|以及|所有|多个|逐个/.test(t)
 }
 
+/**
+ * 只读、无共享状态的**内置**工具 —— 可以安全并发。
+ *
+ * 刻意不包含：`edit_file` / `multi_edit` / `write_file`（写文件，可能改同一路径）、
+ * `run_command` / `run_tests`（起子进程，重且有副作用）、`git_operation`（改仓库状态）、
+ * `todo_write`（共享 UI 状态）。这些并发会互相踩，必须串行。
+ */
+const CONCURRENCY_SAFE_TOOLS = new Set([
+  'list_files',
+  'read_file',
+  'glob',
+  'grep',
+  'search_ast',
+  'search_semantic',
+])
+
+/**
+ * 该工具能否与其他只读工具并发执行。
+ * MCP 工具必须由服务器显式声明 `readOnlyHint: true` 才允许 —— 保守默认。
+ */
+export function isConcurrencySafeTool(name: string, readOnlyMcp: Set<string> = new Set()): boolean {
+  if (CONCURRENCY_SAFE_TOOLS.has(name)) return true
+  return readOnlyMcp.has(name)
+}
+
+/** 执行单个工具调用；异常收敛为结果字符串（并发时不能抛出而中断整批） */
+async function runOneTool(
+  sessionId: string,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<{ result: string; ok: boolean }> {
+  try {
+    const result = isMcpToolName(name)
+      ? await callMcpTool(name, args)
+      : await executeTool({ sessionId }, name, args)
+    return { result, ok: true }
+  } catch (e) {
+    return { result: `工具执行异常：${e instanceof Error ? e.message : String(e)}`, ok: false }
+  }
+}
+
 export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEvent> {
   const queue = new EventQueue<AgentEvent>()
 
@@ -142,7 +184,11 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     const t0 = Date.now()
     const stats: AgentStats = { steps: 0, toolCalls: 0, tokensUsed: 0, durationMs: 0, finished: false }
     // 对照实验用：按需裁剪可用工具集（默认全部 7 个）
-    const activeTools = filterTools(opts.toolFilter)
+    // 内置工具 + **运行时**从 MCP 服务器动态发现的工具（未配置 MCP 时为空，零开销）
+    const mcpTools = await getMcpToolDefs()
+    const activeTools = [...filterTools(opts.toolFilter), ...mcpTools]
+    // 只读 MCP 工具才允许并发（见 isConcurrencySafeTool）
+    const readOnlyMcp = await getMcpReadOnlySet()
     const useCompression = opts.useCompression !== false
     const chatOpts = { enableThinking: opts.thinking }
     /** 步数将尽时只提醒一次，避免每步都注入消息 */
@@ -233,27 +279,46 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
           tool_calls: res.toolCalls,
         })
 
-        // 逐个执行工具并回填结果
-        for (const tc of res.toolCalls) {
+        // ===== 先按序把 tool_call 事件推出去（UI 立刻看到模型决定了什么）=====
+        const calls = res.toolCalls.map((tc) => {
           const args = safeJsonParse(tc.function.arguments)
           queue.push({ type: 'tool_call', id: tc.id, name: tc.function.name, args })
           stats.toolCalls++
           // todo_write 额外发一个结构化事件，供前端渲染任务清单
           if (tc.function.name === 'todo_write') {
-            const norm = normalizeTodos(args.todos)
+            const norm = normalizeTodos((args as { todos?: unknown }).todos)
             if (norm.ok) queue.push({ type: 'todos', todos: norm.todos })
           }
-          let result: string
-          let ok = true
-          try {
-            result = await executeTool({ sessionId }, tc.function.name, args)
-          } catch (e) {
-            ok = false
-            result = `工具执行异常：${e instanceof Error ? e.message : String(e)}`
+          return { tc, args }
+        })
+
+        // ===== 执行：连续的只读调用**并发**跑，其余串行 =====
+        // 为什么要分批而不是全并发：写操作（edit_file/write_file/git_operation）
+        // 之间可能有依赖，并发会互相踩。只对「无副作用」的工具并发才安全。
+        const outcomes = new Array<{ result: string; ok: boolean }>(calls.length)
+        let idx = 0
+        while (idx < calls.length) {
+          if (isConcurrencySafeTool(calls[idx].tc.function.name, readOnlyMcp)) {
+            let end = idx
+            while (end < calls.length && isConcurrencySafeTool(calls[end].tc.function.name, readOnlyMcp)) end++
+            const batch = await Promise.all(
+              calls.slice(idx, end).map(({ tc, args }) => runOneTool(sessionId, tc.function.name, args)),
+            )
+            batch.forEach((r, k) => (outcomes[idx + k] = r))
+            idx = end
+          } else {
+            outcomes[idx] = await runOneTool(sessionId, calls[idx].tc.function.name, calls[idx].args)
+            idx++
           }
+        }
+
+        // ===== 按**原始顺序**回填 =====
+        // OpenAI 协议要求 tool 消息与 tool_calls 顺序一一对应，并发也不能乱序
+        calls.forEach(({ tc }, k) => {
+          const { result, ok } = outcomes[k]
           messages.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: result })
           queue.push({ type: 'tool_result', id: tc.id, name: tc.function.name, result, ok })
-        }
+        })
       }
 
       // 达到步数上限，要求模型直接总结

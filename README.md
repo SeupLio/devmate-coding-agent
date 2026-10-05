@@ -28,6 +28,8 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | ✏️ **精确编辑** | **`edit_file`**（唯一性校验的字符串替换）+ **`multi_edit`**（原子多处替换）—— 对标 Claude Code，不再整文件重写 |
 | 📄 **文档产出** | **`generate_docx`**（Word 报告/方案）+ **`generate_pptx`**（PPT 汇报）—— 直接产出真正的 .docx / .pptx 交付物，工作区可下载 |
 | 🔧 **工具调用** | 15 个沙箱工具：`list_files` / `read_file`(offset/limit) / `edit_file` / `multi_edit` / `write_file` / `glob` / `grep` / `search_ast` / `search_semantic` / `run_command` / `run_tests` / `git_operation` / `todo_write` / `generate_docx` / `generate_pptx` |
+| 🔌 **MCP 工具生态** | **运行时动态发现**外部 MCP 服务器的工具（`mcp__<server>__<tool>`），工具层不再写死；未配置时零开销 |
+| ⚡ **分级并发调度** | 工具按**副作用**分级：只读工具（read/grep/glob/AST/语义）并发执行，写操作与命令串行（避免互相踩）；MCP 工具需声明 `readOnlyHint` 才并发 |
 | 🧠 **思考可视化** | 推理模型的思考过程**流式**输出为独立折叠块，可在界面**一键显示/隐藏**（默认显示，避免"卡住不动"的错觉） |
 | ⚡ **按需规划** | 规划是一次完整 LLM 往返；`auto` 模式下短任务自动跳过（「重构斐波那契为迭代」不再空等一整个回合），界面可切 自动/开/关 |
 | 🔎 **三层检索** | `glob` 找文件 · `grep` 找文本（输出模式/glob 过滤/上下文行） · **`search_ast`** 答结构问题（谁定义/谁调用） · **`search_semantic`** 按语义召回（TF-IDF 向量余弦） |
@@ -379,6 +381,49 @@ bun scripts/bench-run.ts            # 跑分 → benchmarks/bench-report.txt / .
 > 它能支撑的说法是「在 2 个真实开源库的 6 个真实修复任务上表现如何」，
 > **不能**支撑「编码能力是 X 分」。
 
+## MCP：让工具层不再写死
+
+内置工具再多也是「我写死的」。接入 **MCP（Model Context Protocol）** 后，
+Agent 启动时会连上外部工具服务器、**在运行时发现工具**并调用：
+
+```bash
+cp mcp.servers.json.example mcp.servers.json   # 或设置 MCP_SERVERS 环境变量（JSON 数组）
+bun scripts/mcp-smoke.ts                       # 端到端冒烟：真实 Agent 循环调用 MCP 工具
+```
+
+实测输出：
+
+```
+✓ 运行时发现 3 个 MCP 工具：
+    mcp__demo__get_time    (readOnly=false)
+    mcp__demo__word_count  (readOnly=false)
+    mcp__demo__sha256      (readOnly=false)
+  · 调用 MCP 工具 mcp__demo__get_time
+MCP 工具返回：2026/10/5 17:02:43（Asia/Shanghai）
+✓ 冒烟通过：Agent 在运行时发现并成功调用了外部 MCP 工具
+```
+
+实现要点（`src/lib/agent/mcp.ts`，零依赖手写）：
+
+- **协议**：stdio 上换行分隔的 JSON-RPC 2.0（**不是** LSP 的 `Content-Length` 分帧）
+- **能力**：`initialize` 握手（含版本协商）/ `tools/list` / `tools/call` / 优雅关闭
+- **健壮性**：请求超时、进程崩溃感知（把 stderr 带进错误信息）、单服务器失败不影响其余
+- **命名空间**：`mcp__<server>__<tool>`，避免与内置工具撞名
+- **并发安全**：MCP 工具**默认串行**，只有服务器显式声明 `readOnlyHint: true` 才允许并发
+
+### 分级并发调度
+
+工具执行不再一律串行。按**副作用**分级：
+
+| 类别 | 工具 | 调度 |
+|---|---|---|
+| 只读 | `read_file` `list_files` `glob` `grep` `search_ast` `search_semantic` | **并发** |
+| 有副作用 | `edit_file` `multi_edit` `write_file` `run_command` `run_tests` `git_operation` `todo_write` | 串行 |
+| MCP | 外部工具 | 默认串行，声明只读才并发 |
+
+只对「连续的只读调用」并发，且回填结果时**严格按原始顺序**
+（OpenAI 协议要求 tool 消息与 tool_calls 顺序一一对应）。
+
 ## 目录结构
 
 ```
@@ -398,6 +443,8 @@ src/
     llm.ts                    # LLM provider 路由
     llm.openai.ts             # OpenAI 兼容实现（流式 + 思考内容 + 网络错误重试）
     llm.zai.ts                # 智谱内部 SDK 实现
+    mcp.ts                    # 最小 MCP 客户端（stdio JSON-RPC，零依赖手写）
+    mcp-registry.ts           # MCP 服务器注册表（配置加载 / 工具发现 / 调用路由）
     prompts.ts                # 系统提示词（工具使用纪律）
     workspace.ts              # 会话沙箱管理（独立 Git 仓库 + DEVmate.md 项目记忆）
   lib/eval/                    # 评测体系（自造任务，快、可控，用于回归与消融）
@@ -432,6 +479,8 @@ scripts/check-sensitivity.ts   # CLI 评测灵敏度入口
 scripts/bench-build.ts         # 构建并验证真实任务（需要 GITHUB_TOKEN）
 scripts/bench-run.ts           # 在真实任务上跑分，产出多维报告
 scripts/bench-debug.ts         # 打印单条任务的完整轨迹（排查 Agent 卡在哪）
+scripts/mcp-demo-server.ts     # 一个真实的最小 MCP 服务器（stdio，暴露 3 个工具）
+scripts/mcp-smoke.ts           # MCP 端到端冒烟：验证 Agent 运行时发现并调用外部工具
 docs/EVALUATION.md             # 评测方法论（五层体系）
 docs/BENCHMARK.md              # 真实任务基准设计（五条原则如何落地 + 已知局限）
 docs/PRODUCTION-READINESS.md   # 生产落地评估（自我批评：哪些设计还比较简陋）

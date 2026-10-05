@@ -856,3 +856,124 @@ describe('真实任务基准（bench）', () => {
     await expect(judgeWithLlm({ task: 't', rubric: [], artifact: 'a' })).rejects.toThrow(/rubric/)
   })
 })
+
+// ===================== MCP：运行时动态发现工具 =====================
+
+describe('MCP 客户端（动态工具发现）', () => {
+  const SERVER = path.join(process.cwd(), 'scripts', 'mcp-demo-server.ts')
+  let client: import('@/lib/agent/mcp').McpClient
+
+  beforeAll(async () => {
+    const { McpClient } = await import('@/lib/agent/mcp')
+    client = await McpClient.connect({
+      name: 'demo',
+      command: process.execPath, // 当前运行时（bun）可直接跑 .ts
+      args: [SERVER],
+      timeoutMs: 10_000,
+    })
+  })
+
+  test('initialize 握手返回 serverInfo 与 capabilities', () => {
+    expect(client.serverInfo.name).toBe('devmate-demo')
+    expect(client.capabilities).toHaveProperty('tools')
+  })
+
+  test('tools/list 动态发现工具，并加上 mcp__<server>__<tool> 命名空间', async () => {
+    const tools = await client.listTools()
+    const names = tools.map((t) => t.qualifiedName)
+    expect(names).toContain('mcp__demo__get_time')
+    expect(names).toContain('mcp__demo__word_count')
+    expect(names).toContain('mcp__demo__sha256')
+    // 每个工具都必须带 inputSchema，否则无法转成 LLM 的 function 定义
+    for (const t of tools) expect(t.inputSchema).toHaveProperty('type')
+  })
+
+  test('tools/call 正确执行并返回文本结果', async () => {
+    const r = await client.callTool('word_count', { text: 'hello world\nfoo' })
+    expect(r.isError).toBe(false)
+    expect(r.text).toContain('字符')
+    expect(r.text).toContain('词 3')
+  })
+
+  test('tools/call 调用未知工具 → isError=true（不抛异常，交给模型自行纠正）', async () => {
+    const r = await client.callTool('not_a_tool', {})
+    expect(r.isError).toBe(true)
+    expect(r.text).toContain('未知工具')
+  })
+
+  test('连接不存在的服务器 → 抛出可读错误，不挂死', async () => {
+    const { McpClient } = await import('@/lib/agent/mcp')
+    await expect(
+      McpClient.connect({ name: 'ghost', command: 'definitely-not-a-real-binary-xyz', timeoutMs: 5000 }),
+    ).rejects.toThrow()
+  })
+
+  test('命名空间工具名可识别', async () => {
+    const { isMcpToolName, qualifyToolName } = await import('@/lib/agent/mcp')
+    expect(isMcpToolName('mcp__demo__get_time')).toBe(true)
+    expect(isMcpToolName('read_file')).toBe(false)
+    // 非法字符要被规范化，避免破坏 function name 规范
+    expect(qualifyToolName('my server', 'do/thing')).toBe('mcp__my_server__do_thing')
+  })
+})
+
+// ===================== 并发调度：并行工具执行的安全前提 =====================
+
+describe('并发调度安全性（并行工具执行的前提）', () => {
+  test('只读内置工具允许并发', async () => {
+    const { isConcurrencySafeTool } = await import('@/lib/agent/loop')
+    for (const n of ['read_file', 'list_files', 'glob', 'grep', 'search_ast', 'search_semantic']) {
+      expect(isConcurrencySafeTool(n)).toBe(true)
+    }
+  })
+
+  test('写操作 / 命令 / git / todo 必须串行（并发会互相踩）', async () => {
+    const { isConcurrencySafeTool } = await import('@/lib/agent/loop')
+    for (const n of [
+      'edit_file', 'multi_edit', 'write_file',
+      'run_command', 'run_tests', 'git_operation', 'todo_write',
+      'generate_docx', 'generate_pptx',
+    ]) {
+      expect(isConcurrencySafeTool(n)).toBe(false)
+    }
+  })
+
+  test('MCP 工具默认串行，只有服务器声明 readOnlyHint 才允许并发', async () => {
+    const { isConcurrencySafeTool } = await import('@/lib/agent/loop')
+    // 未在白名单里 → 保守当作有副作用
+    expect(isConcurrencySafeTool('mcp__demo__get_time')).toBe(false)
+    expect(isConcurrencySafeTool('mcp__demo__get_time', new Set(['mcp__demo__get_time']))).toBe(true)
+  })
+})
+
+// ===================== MCP 配置加载 =====================
+
+describe('MCP 配置加载', () => {
+  test('无任何配置时返回空数组（不启用 MCP，零开销）', async () => {
+    const { loadMcpConfigs } = await import('@/lib/agent/mcp-registry')
+    const saved = process.env.MCP_SERVERS
+    delete process.env.MCP_SERVERS
+    expect(loadMcpConfigs('/definitely/not/a/real/dir')).toEqual([])
+    if (saved) process.env.MCP_SERVERS = saved
+  })
+
+  test('从 MCP_SERVERS 环境变量解析服务器列表', async () => {
+    const { loadMcpConfigs } = await import('@/lib/agent/mcp-registry')
+    const saved = process.env.MCP_SERVERS
+    process.env.MCP_SERVERS = JSON.stringify([{ name: 'x', command: 'node', args: ['a.js'] }])
+    const cfgs = loadMcpConfigs()
+    expect(cfgs.length).toBe(1)
+    expect(cfgs[0].name).toBe('x')
+    if (saved) process.env.MCP_SERVERS = saved
+    else delete process.env.MCP_SERVERS
+  })
+
+  test('MCP_SERVERS 非法 JSON 时降级为空（不影响主流程）', async () => {
+    const { loadMcpConfigs } = await import('@/lib/agent/mcp-registry')
+    const saved = process.env.MCP_SERVERS
+    process.env.MCP_SERVERS = '{not json'
+    expect(loadMcpConfigs('/definitely/not/a/real/dir')).toEqual([])
+    if (saved) process.env.MCP_SERVERS = saved
+    else delete process.env.MCP_SERVERS
+  })
+})

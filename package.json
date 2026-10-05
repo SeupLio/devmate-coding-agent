@@ -17,6 +17,7 @@
     "bench:build": "bun scripts/bench-build.ts",
     "bench:run": "bun scripts/bench-run.ts",
     "bench:debug": "bun scripts/bench-debug.ts",
+    "mcp:smoke": "bun scripts/mcp-smoke.ts",
     "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
