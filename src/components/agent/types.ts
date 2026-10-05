@@ -12,6 +12,8 @@ export interface TodoItemUI {
   activeForm?: string
 }
 
+export type PermissionModeUI = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
+
 export type SSEEvent =
   | { type: 'plan'; steps: string[] }
   | { type: 'step_start'; step: number }
@@ -21,8 +23,40 @@ export type SSEEvent =
   | { type: 'tool_result'; id: string; name: string; result: string; ok: boolean }
   | { type: 'todos'; todos: TodoItemUI[] }
   | { type: 'context'; tokensBefore: number; tokensAfter: number; compressedCount: number }
+  /** 权限判定结果（审计用；deny 时值得在 UI 上提示） */
+  | { type: 'permission'; tool: string; action: 'allow' | 'deny' | 'ask'; risk: string; reason: string }
+  /** 需要人工审批：UI 弹卡片，用户决定后 POST /api/approvals */
+  | { type: 'approval_required'; id: string; tool: string; args: unknown; risk: string; reason: string }
+  /** 运行结束的可观测性摘要 */
+  | {
+      type: 'trace'
+      traceId: string
+      durationMs: number
+      costCny: number
+      usage: { promptTokens: number; completionTokens: number; totalTokens: number; source: string }
+      timeByKind: Record<string, number>
+    }
   | { type: 'final'; summary: string; stats: AgentStats }
   | { type: 'error'; message: string }
+
+export interface UIApproval {
+  id: string
+  tool: string
+  args: unknown
+  risk: string
+  reason: string
+  /** 用户决定后的状态 */
+  status: 'pending' | 'allowed' | 'denied' | 'expired'
+}
+
+export interface UITrace {
+  traceId: string
+  durationMs: number
+  costCny: number
+  totalTokens: number
+  usageSource: string
+  timeByKind: Record<string, number>
+}
 
 export interface UIToolCall {
   id: string
@@ -35,11 +69,23 @@ export interface UIToolCall {
 
 export interface UIMessage {
   id: string
-  kind: 'user' | 'assistant' | 'tool' | 'plan' | 'reasoning' | 'error' | 'context'
+  kind:
+    | 'user'
+    | 'assistant'
+    | 'tool'
+    | 'plan'
+    | 'reasoning'
+    | 'error'
+    | 'context'
+    | 'approval'
+    | 'permission_denied'
+    | 'trace'
   text?: string
   tool?: UIToolCall
   steps?: string[]
   stats?: AgentStats
+  approval?: UIApproval
+  trace?: UITrace
 }
 
 export interface SessionInfo {

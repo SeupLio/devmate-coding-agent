@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { runAgent } from '@/lib/agent/loop'
 import { workspaceExists, createWorkspace } from '@/lib/agent/workspace'
+import { isPermissionMode, type PermissionRule } from '@/lib/agent/permissions'
+import { saveTrace } from '@/lib/agent/trace-store'
 
 export const maxDuration = 300
 
@@ -18,6 +20,10 @@ export async function POST(req: NextRequest) {
   const plan: boolean | 'auto' = body.plan === true || body.plan === false ? body.plan : 'auto'
   // 是否允许深度思考：false 时显著更快
   const thinking = body.thinking !== false
+  // 权限模式（P0）：default / acceptEdits / plan / bypassPermissions
+  const permissionMode = isPermissionMode(body.permissionMode) ? body.permissionMode : 'default'
+  // 规则化 allow/deny/ask（可选）
+  const permissionRules: PermissionRule[] = Array.isArray(body.permissionRules) ? body.permissionRules : []
   if (!sessionId || !task) {
     return new Response(JSON.stringify({ error: 'sessionId 与 task 必填' }), {
       status: 400,
@@ -54,7 +60,23 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
       }
       try {
-        for await (const ev of runAgent({ sessionId, task, history: historyMessages, plan, thinking })) {
+        for await (const ev of runAgent({
+          sessionId,
+          task,
+          history: historyMessages,
+          plan,
+          thinking,
+          permissionMode,
+          permissionRules,
+          // 可观测性：每次运行落一份完整 trace
+          onTrace: (rec) => {
+            try {
+              saveTrace(rec)
+            } catch {
+              /* 落盘失败不影响主流程 */
+            }
+          },
+        })) {
           send(ev)
           // 持久化关键事件
           if (ev.type === 'tool_call') {

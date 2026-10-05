@@ -9,6 +9,15 @@
 import { chatStream, estimateTokens, type ChatMessageParam } from './llm'
 import { executeTool, filterTools, normalizeTodos, type TodoItem } from './tools'
 import { callMcpTool, getMcpReadOnlySet, getMcpToolDefs, isMcpToolName } from './mcp-registry'
+import {
+  evaluatePermission,
+  extractSubject,
+  type PermissionContext,
+  type PermissionMode,
+  type PermissionRule,
+} from './permissions'
+import { recordAudit, requestApproval } from './approvals'
+import { Tracer, type TraceRecord } from './trace'
 import { compressContext } from './context'
 import { AGENT_SYSTEM_PROMPT, PLAN_SYSTEM_PROMPT } from './prompts'
 import { readProjectMemory } from './workspace'
@@ -22,6 +31,26 @@ export type AgentEvent =
   | { type: 'todos'; todos: TodoItem[] }
   | { type: 'context'; tokensBefore: number; tokensAfter: number; compressedCount: number }
   | { type: 'step_start'; step: number }
+  /** 权限判定为 ask：挂起等人工决定（前端弹审批卡片） */
+  | {
+      type: 'approval_required'
+      id: string
+      tool: string
+      args: unknown
+      risk: string
+      reason: string
+    }
+  /** 权限判定结果（allow/deny/ask）—— 审计用 */
+  | { type: 'permission'; tool: string; action: string; risk: string; reason: string }
+  /** 运行结束后的可观测性摘要（完整 trace 通过 onTrace 落盘） */
+  | {
+      type: 'trace'
+      traceId: string
+      durationMs: number
+      costCny: number
+      usage: { promptTokens: number; completionTokens: number; totalTokens: number; source: string }
+      timeByKind: Record<string, number>
+    }
   | { type: 'final'; summary: string; stats: AgentStats }
   | { type: 'error'; message: string }
 
@@ -55,6 +84,22 @@ export interface RunAgentOptions {
   useCompression?: boolean
   /** 只允许这些工具名参与编排（默认全部 7 个）；传空数组 = 无工具 */
   toolFilter?: string[]
+
+  // ===== 权限模型（P0）=====
+  /** 权限模式，默认 'default'（写/执行需确认） */
+  permissionMode?: PermissionMode
+  /** 规则化 allow/deny/ask */
+  permissionRules?: PermissionRule[]
+  /** 审批超时（毫秒）；**超时按拒绝处理** */
+  approvalTimeoutMs?: number
+  /** 权限上下文（默认从 sessionId 派生） */
+  permissionContext?: Partial<PermissionContext>
+
+  // ===== 可观测性（P0）=====
+  /** 拿到完整 trace 记录的回调（用于落盘 / 上报） */
+  onTrace?: (record: TraceRecord) => void
+  /** 使用的模型名（成本账本用；默认取环境变量） */
+  model?: string
 }
 
 /** 简单异步事件队列：生产者 push，消费者以 async generator 形式实时取出 */
@@ -159,20 +204,10 @@ export function isConcurrencySafeTool(name: string, readOnlyMcp: Set<string> = n
   return readOnlyMcp.has(name)
 }
 
-/** 执行单个工具调用；异常收敛为结果字符串（并发时不能抛出而中断整批） */
-async function runOneTool(
-  sessionId: string,
-  name: string,
-  args: Record<string, unknown>,
-): Promise<{ result: string; ok: boolean }> {
-  try {
-    const result = isMcpToolName(name)
-      ? await callMcpTool(name, args)
-      : await executeTool({ sessionId }, name, args)
-    return { result, ok: true }
-  } catch (e) {
-    return { result: `工具执行异常：${e instanceof Error ? e.message : String(e)}`, ok: false }
-  }
+/** 把工具入参压成一行摘要（trace 里不要塞全文） */
+function summarizeArgs(args: Record<string, unknown>): string {
+  const s = JSON.stringify(args ?? {})
+  return s.length > 200 ? `${s.slice(0, 200)}…` : s
 }
 
 export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEvent> {
@@ -189,6 +224,124 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     const activeTools = [...filterTools(opts.toolFilter), ...mcpTools]
     // 只读 MCP 工具才允许并发（见 isConcurrencySafeTool）
     const readOnlyMcp = await getMcpReadOnlySet()
+
+    // ===== 可观测性：一次任务 = 一个 trace =====
+    const tracer = new Tracer(
+      sessionId,
+      task,
+      opts.model ?? process.env.OPENAI_MODEL ?? 'unknown',
+    )
+
+    // ===== 权限模型 =====
+    const permCtx: PermissionContext = {
+      mode: opts.permissionMode ?? 'default',
+      rules: opts.permissionRules ?? [],
+      extraSensitive: opts.permissionContext?.extraSensitive,
+    }
+
+    /**
+     * 执行单个工具：**先过权限闸门，再执行**。
+     * 权限判定为 deny → 直接返回错误（模型可据此改策略）；
+     * 判定为 ask → 挂起等人工审批（超时按拒绝）。
+     */
+    const runTool = async (
+      name: string,
+      args: Record<string, unknown>,
+    ): Promise<{ result: string; ok: boolean }> => {
+      const decision = evaluatePermission(name, args, permCtx)
+      queue.push({ type: 'permission', tool: name, action: decision.action, risk: decision.risk, reason: decision.reason })
+
+      if (decision.action === 'deny') {
+        recordAudit({
+          at: Date.now(), sessionId, tool: name, risk: decision.risk,
+          action: 'deny', reason: decision.reason, subject: extractSubject(name, args),
+        })
+        return { result: `错误：操作被权限策略拒绝 —— ${decision.reason}`, ok: false }
+      }
+
+      if (decision.action === 'ask') {
+        const pendingReq = {
+          sessionId,
+          tool: name,
+          args,
+          risk: decision.risk,
+          reason: decision.reason,
+        }
+        // 先告知前端（带上 requestId），再挂起等待
+        const approvalPromise = requestApproval(pendingReq, opts.approvalTimeoutMs ?? 120_000)
+        // 需要拿到 id 才能让前端回传，所以这里用 listPending 反查
+        const { listPendingApprovals } = await import('./approvals')
+        // 稍等一拍确保 requestApproval 已注册
+        await new Promise((r) => setTimeout(r, 0))
+        const mine = listPendingApprovals(sessionId).find((r) => r.tool === name && r.createdAt > Date.now() - 5000)
+        if (mine) {
+          queue.push({
+            type: 'approval_required',
+            id: mine.id,
+            tool: name,
+            args,
+            risk: decision.risk,
+            reason: decision.reason,
+          })
+        }
+        const verdict = await approvalPromise
+        recordAudit({
+          at: Date.now(), sessionId, tool: name, risk: decision.risk,
+          action: 'ask', resolution: verdict, reason: decision.reason,
+          subject: extractSubject(name, args),
+        })
+        if (verdict !== 'allow') {
+          return {
+            result: verdict === 'timeout'
+              ? '错误：等待人工审批超时（按拒绝处理）'
+              : '错误：用户拒绝执行该操作',
+            ok: false,
+          }
+        }
+      }
+
+      const span = tracer.startSpan(name, 'tool', { args: summarizeArgs(args) })
+      try {
+        const result = isMcpToolName(name)
+          ? await callMcpTool(name, args)
+          : await executeTool({ sessionId }, name, args)
+        const bad = /^(错误|工具执行异常)/.test(result)
+        // 失败时把首行原因带进 span —— 否则 trace 只说「失败了」，说不出「为什么」
+        span.end(
+          bad ? { resultLen: result.length, error: result.split('\n')[0].slice(0, 200) } : { resultLen: result.length },
+          bad ? 'error' : 'ok',
+        )
+        return { result, ok: !bad }
+      } catch (e) {
+        const msg = `工具执行异常：${e instanceof Error ? e.message : String(e)}`
+        span.end({ error: msg }, 'error')
+        return { result: msg, ok: false }
+      }
+    }
+
+    /** 收尾 trace：回调落盘 + 给前端推一个**摘要**（完整记录不进 SSE，太大） */
+    const emitTrace = () => {
+      const record = tracer.finish()
+      try {
+        opts.onTrace?.(record)
+      } catch {
+        /* 落盘/上报失败不能影响主流程 */
+      }
+      queue.push({
+        type: 'trace',
+        traceId: record.traceId,
+        durationMs: record.durationMs,
+        costCny: record.costCny,
+        usage: {
+          promptTokens: record.usage.promptTokens,
+          completionTokens: record.usage.completionTokens,
+          totalTokens: record.usage.totalTokens,
+          source: record.usage.source,
+        },
+        timeByKind: record.timeByKind,
+      })
+    }
+
     const useCompression = opts.useCompression !== false
     const chatOpts = { enableThinking: opts.thinking }
     /** 步数将尽时只提醒一次，避免每步都注入消息 */
@@ -206,6 +359,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       const wantPlan = opts.plan === 'auto' ? needsPlan(task) : opts.plan !== false
       if (wantPlan) {
         // 规划阶段的思考过程也流式推出去，避免「静默空等」
+        const planSpan = tracer.startSpan('plan', 'plan')
         const planRes = await chatStream(
           [
             { role: 'system', content: PLAN_SYSTEM_PROMPT },
@@ -215,6 +369,8 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
           { onReasoning: (text) => queue.push({ type: 'reasoning', text }) },
           chatOpts,
         )
+        planSpan.end({ chars: planRes.content.length })
+        tracer.recordLlmUsage(planRes.usage, estimateTokens(planRes.content))
         stats.tokensUsed += estimateTokens(planRes.content)
         const parsed = extractJson(planRes.content)
         const steps = Array.isArray((parsed as { steps?: unknown })?.steps)
@@ -256,10 +412,17 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
         }
 
         // token 实时流式推入队列（与工具事件交织）
+        const llmSpan = tracer.startSpan(`llm.step${step}`, 'llm', { tools: activeTools.length })
         const res = await chatStream(messages, activeTools.length ? activeTools : undefined, {
           onToken: (text) => queue.push({ type: 'token', text }),
           onReasoning: (text) => queue.push({ type: 'reasoning', text }),
         }, chatOpts)
+        llmSpan.end({ toolCalls: res.toolCalls.length, finish: res.finishReason ?? '' })
+        tracer.countStep()
+        tracer.recordLlmUsage(
+          res.usage,
+          estimateTokens(messages.map((m) => m.content ?? '').join('') + res.content),
+        )
         stats.tokensUsed += estimateTokens(
           messages.map((m) => m.content ?? '').join('') + res.content,
         )
@@ -268,6 +431,8 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
           // 没有工具调用 → 最终回答（内容已通过 token 事件流式输出）
           stats.finished = true
           stats.durationMs = Date.now() - t0
+          // ⚠️ 这条是「正常完成」路径，也必须收尾 trace —— 否则最常见的成功路径反而没有可观测性
+          emitTrace()
           queue.push({ type: 'final', summary: res.content, stats })
           return
         }
@@ -284,6 +449,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
           const args = safeJsonParse(tc.function.arguments)
           queue.push({ type: 'tool_call', id: tc.id, name: tc.function.name, args })
           stats.toolCalls++
+          tracer.countToolCall()
           // todo_write 额外发一个结构化事件，供前端渲染任务清单
           if (tc.function.name === 'todo_write') {
             const norm = normalizeTodos((args as { todos?: unknown }).todos)
@@ -302,12 +468,12 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
             let end = idx
             while (end < calls.length && isConcurrencySafeTool(calls[end].tc.function.name, readOnlyMcp)) end++
             const batch = await Promise.all(
-              calls.slice(idx, end).map(({ tc, args }) => runOneTool(sessionId, tc.function.name, args)),
+              calls.slice(idx, end).map(({ tc, args }) => runTool(tc.function.name, args)),
             )
             batch.forEach((r, k) => (outcomes[idx + k] = r))
             idx = end
           } else {
-            outcomes[idx] = await runOneTool(sessionId, calls[idx].tc.function.name, calls[idx].args)
+            outcomes[idx] = await runTool(calls[idx].tc.function.name, calls[idx].args)
             idx++
           }
         }
@@ -329,9 +495,13 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       }, chatOpts)
       stats.finished = true
       stats.durationMs = Date.now() - t0
+      emitTrace()
       queue.push({ type: 'final', summary: finalRes.content, stats })
     } catch (e) {
-      queue.push({ type: 'error', message: e instanceof Error ? e.message : String(e) })
+      const msg = e instanceof Error ? e.message : String(e)
+      tracer.fail(msg)
+      emitTrace()
+      queue.push({ type: 'error', message: msg })
     } finally {
       queue.close()
     }

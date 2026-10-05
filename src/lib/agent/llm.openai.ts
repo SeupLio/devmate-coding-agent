@@ -47,7 +47,15 @@ export interface StreamResult {
   reasoning: string
   toolCalls: ToolCall[]
   finishReason: string | null
-  usage?: { prompt_tokens?: number; completion_tokens?: number }
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    /** 命中 prompt cache 的 token 数（成本分析的关键指标） */
+    prompt_tokens_details?: { cached_tokens?: number }
+    /** 其中用于思考的 token 数 */
+    completion_tokens_details?: { reasoning_tokens?: number }
+  }
 }
 
 /** 粗略 token 估算：与原实现保持一致 */
@@ -109,6 +117,11 @@ export async function chatStream(
   const thinking =
     opts?.enableThinking ?? (process.env.OPENAI_ENABLE_THINKING ?? 'true').toLowerCase() !== 'false'
   if (!thinking) body.enable_thinking = false
+  // 让网关在流式响应的最后一帧带上真实 usage（成本账本用）。
+  // 个别网关不认这个字段 → 用 OPENAI_STREAM_USAGE=false 关掉。
+  if ((process.env.OPENAI_STREAM_USAGE ?? 'true').toLowerCase() !== 'false') {
+    body.stream_options = { include_usage: true }
+  }
   // 逃生口：把额外字段并入请求体（优先级最高）。
   // 例：OPENAI_EXTRA_BODY={"enable_thinking":false}
   //     OPENAI_EXTRA_BODY={"reasoning_effort":"low"}

@@ -977,3 +977,208 @@ describe('MCP 配置加载', () => {
     else delete process.env.MCP_SERVERS
   })
 })
+
+// ===================== P0：权限模型 =====================
+
+describe('权限模型（P0）', () => {
+  const P = async () => await import('@/lib/agent/permissions')
+
+  test('工具风险分级：读 / 写 / 执行', async () => {
+    const { classifyRisk } = await P()
+    expect(classifyRisk('read_file')).toBe('read')
+    expect(classifyRisk('grep')).toBe('read')
+    expect(classifyRisk('todo_write')).toBe('read')
+    expect(classifyRisk('edit_file')).toBe('write')
+    expect(classifyRisk('write_file')).toBe('write')
+    expect(classifyRisk('run_command')).toBe('execute')
+    expect(classifyRisk('git_operation')).toBe('execute')
+    // 未知工具（含 MCP）保守当作 execute —— 外部行为不可知
+    expect(classifyRisk('mcp__x__y')).toBe('execute')
+  })
+
+  test('敏感文件硬拦截：即使 bypassPermissions 也拒绝', async () => {
+    const { evaluatePermission } = await P()
+    for (const f of ['.env', 'config/.env.local', 'id_rsa', 'certs/server.pem', '.aws/credentials']) {
+      const d = evaluatePermission('read_file', { path: f }, { mode: 'bypassPermissions' })
+      expect(d.action).toBe('deny')
+      expect(d.reason).toContain('敏感文件')
+    }
+    // 普通文件不受影响
+    expect(evaluatePermission('read_file', { path: 'src/app.js' }, { mode: 'bypassPermissions' }).action).toBe('allow')
+  })
+
+  test('plan 模式：只读放行，写与执行一律拒绝', async () => {
+    const { evaluatePermission } = await P()
+    const ctx = { mode: 'plan' as const }
+    expect(evaluatePermission('read_file', { path: 'a.js' }, ctx).action).toBe('allow')
+    expect(evaluatePermission('edit_file', { path: 'a.js' }, ctx).action).toBe('deny')
+    expect(evaluatePermission('run_command', { command: 'node a.js' }, ctx).action).toBe('deny')
+  })
+
+  test('acceptEdits：写放行，执行要问', async () => {
+    const { evaluatePermission } = await P()
+    const ctx = { mode: 'acceptEdits' as const }
+    expect(evaluatePermission('edit_file', { path: 'a.js' }, ctx).action).toBe('allow')
+    expect(evaluatePermission('run_tests', { path: 'a.js' }, ctx).action).toBe('ask')
+  })
+
+  test('default 模式：写与执行都要问，只读放行', async () => {
+    const { evaluatePermission } = await P()
+    const ctx = { mode: 'default' as const }
+    expect(evaluatePermission('read_file', { path: 'a.js' }, ctx).action).toBe('allow')
+    expect(evaluatePermission('edit_file', { path: 'a.js' }, ctx).action).toBe('ask')
+    expect(evaluatePermission('run_command', { command: 'ls' }, ctx).action).toBe('ask')
+  })
+
+  test('破坏性命令必须 ask —— 即使 acceptEdits', async () => {
+    const { evaluatePermission } = await P()
+    const ctx = { mode: 'acceptEdits' as const }
+    for (const cmd of ['rm -rf /tmp/x', 'git reset --hard HEAD~3', 'git push --force origin main']) {
+      const d = evaluatePermission('run_command', { command: cmd }, ctx)
+      expect(d.action).toBe('ask')
+      expect(d.risk).toBe('destructive')
+    }
+  })
+
+  test('显式 deny 规则优先于 allow 规则', async () => {
+    const { evaluatePermission } = await P()
+    const ctx = {
+      mode: 'bypassPermissions' as const,
+      rules: [
+        { tool: 'run_command', action: 'allow' as const },
+        { tool: 'run_command', pattern: 'git push', action: 'deny' as const },
+      ],
+    }
+    expect(evaluatePermission('run_command', { command: 'git push origin main' }, ctx).action).toBe('deny')
+    expect(evaluatePermission('run_command', { command: 'ls -la' }, ctx).action).toBe('allow')
+  })
+
+  test('通配规则可作用于 MCP 工具', async () => {
+    const { evaluatePermission } = await P()
+    const ctx = {
+      mode: 'default' as const,
+      rules: [{ tool: 'mcp__*', action: 'allow' as const }],
+    }
+    expect(evaluatePermission('mcp__demo__get_time', {}, ctx).action).toBe('allow')
+  })
+
+  test('extractSubject 能从各类参数里取出被作用对象', async () => {
+    const { extractSubject } = await P()
+    expect(extractSubject('run_command', { command: 'ls' })).toBe('ls')
+    expect(extractSubject('read_file', { path: 'a/b.js' })).toBe('a/b.js')
+    expect(extractSubject('multi_edit', { edits: [{ path: 'x.js' }] })).toBe('x.js')
+  })
+})
+
+// ===================== P0：人在环审批 =====================
+
+describe('人在环审批（P0）', () => {
+  test('挂起后可由外部 resolve，返回用户决定', async () => {
+    const { requestApproval, resolveApproval } = await import('@/lib/agent/approvals')
+    const p = requestApproval(
+      { sessionId: 's1', tool: 'run_command', args: {}, risk: 'destructive', reason: 'test' },
+      5000,
+    )
+    // 等一拍让请求注册
+    await new Promise((r) => setTimeout(r, 5))
+    const { listPendingApprovals } = await import('@/lib/agent/approvals')
+    const pending = listPendingApprovals('s1')
+    expect(pending.length).toBeGreaterThan(0)
+    expect(resolveApproval(pending[pending.length - 1].id, 'allow')).toBe(true)
+    expect(await p).toBe('allow')
+  })
+
+  test('超时按**拒绝**处理（fail-safe：没人看着不能自己往下走）', async () => {
+    const { requestApproval } = await import('@/lib/agent/approvals')
+    const verdict = await requestApproval(
+      { sessionId: 's2', tool: 'run_command', args: {}, risk: 'destructive', reason: 'timeout-test' },
+      50,
+    )
+    expect(verdict).toBe('timeout')
+  })
+
+  test('resolve 未知 id 返回 false（不假装成功）', async () => {
+    const { resolveApproval } = await import('@/lib/agent/approvals')
+    expect(resolveApproval('not-a-real-id', 'allow')).toBe(false)
+  })
+
+  test('审计日志记录决策', async () => {
+    const { recordAudit, getAuditLog } = await import('@/lib/agent/approvals')
+    recordAudit({
+      at: Date.now(), sessionId: 's3', tool: 'edit_file', risk: 'write',
+      action: 'allow', reason: 'unit-test', subject: 'a.js',
+    })
+    const log = getAuditLog(10)
+    expect(log.some((r) => r.reason === 'unit-test' && r.tool === 'edit_file')).toBe(true)
+  })
+})
+
+// ===================== P0：可观测性 =====================
+
+describe('可观测性与成本账本（P0）', () => {
+  test('Tracer 记录 span 与耗时', async () => {
+    const { Tracer } = await import('@/lib/agent/trace')
+    const t = new Tracer('s', 'task', 'glm-4-flash')
+    const s1 = t.startSpan('read_file', 'tool')
+    s1.end({ ok: true })
+    const s2 = t.startSpan('llm.step1', 'llm')
+    s2.end()
+    t.countStep()
+    t.countToolCall()
+    const rec = t.finish()
+    expect(rec.spans.length).toBe(2)
+    expect(rec.spans[0].durationMs).toBeGreaterThanOrEqual(0)
+    expect(rec.outcome.steps).toBe(1)
+    expect(rec.outcome.toolCalls).toBe(1)
+    expect(rec.timeByKind).toHaveProperty('tool')
+    expect(rec.timeByKind).toHaveProperty('llm')
+  })
+
+  test('成本账本：有 API usage 时标 api，缺失时标 estimated', async () => {
+    const { Tracer } = await import('@/lib/agent/trace')
+    const a = new Tracer('s', 't', 'gpt-4o-mini')
+    a.recordLlmUsage({ prompt_tokens: 1_000_000, completion_tokens: 0 }, 0)
+    const ra = a.finish()
+    expect(ra.usage.source).toBe('api')
+    expect(ra.usage.promptTokens).toBe(1_000_000)
+    expect(ra.costCny).toBeGreaterThan(0) // 100 万输入 token 必然有成本
+
+    const b = new Tracer('s', 't', 'gpt-4o-mini')
+    b.recordLlmUsage(undefined, 500)
+    const rb = b.finish()
+    expect(rb.usage.source).toBe('estimated')
+    expect(rb.usage.completionTokens).toBe(500)
+  })
+
+  test('未知模型成本为 0（不瞎猜价格）', async () => {
+    const { costOf } = await import('@/lib/agent/trace')
+    expect(costOf('some-unknown-model-xyz', 1_000_000, 1_000_000)).toBe(0)
+  })
+
+  test('百分位计算', async () => {
+    const { percentile } = await import('@/lib/agent/trace')
+    const xs = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    expect(percentile(xs, 50)).toBe(50)
+    expect(percentile(xs, 95)).toBe(100)
+    expect(percentile([], 50)).toBe(0)
+  })
+
+  test('summarize 聚合 P50/P95、成本与工具失败率', async () => {
+    const { Tracer, summarize } = await import('@/lib/agent/trace')
+    const mk = (fail: boolean, dur: number) => {
+      const t = new Tracer('s', 'task', 'gpt-4o-mini')
+      const s = t.startSpan('run_tests', 'tool')
+      s.end(undefined, fail ? 'error' : 'ok')
+      t.recordLlmUsage({ prompt_tokens: 100, completion_tokens: 50 }, 0)
+      return t.finish()
+    }
+    const recs = [mk(false, 1), mk(true, 2), mk(false, 3)]
+    const sum = summarize(recs)
+    expect(sum.count).toBe(3)
+    expect(sum.tokens.total).toBe(450)
+    expect(sum.toolFailure['run_tests'].calls).toBe(3)
+    expect(sum.toolFailure['run_tests'].errors).toBe(1)
+    expect(sum.toolFailure['run_tests'].rate).toBeCloseTo(1 / 3, 5)
+    expect(sum.latencyMs.max).toBeGreaterThanOrEqual(0)
+  })
+})

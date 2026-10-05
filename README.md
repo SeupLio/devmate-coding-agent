@@ -424,6 +424,80 @@ MCP 工具返回：2026/10/5 17:02:43（Asia/Shanghai）
 只对「连续的只读调用」并发，且回填结果时**严格按原始顺序**
 （OpenAI 协议要求 tool 消息与 tool_calls 顺序一一对应）。
 
+## 可观测性：从「跑完了」到「跑得怎么样」
+
+一次任务 = 一个 **trace**，每次 LLM / 工具调用 = 一个 **span**，
+落盘到 `traces/<traceId>.json`。`bun run trace:report` 输出：
+
+```
+—— 时间花在哪（瓶颈定位）——
+  llm         32.6s   98%  █████████████████████████████
+  tool        769ms    2%  █
+—— prompt cache ——  命中率 90%（57088/62809）
+—— 工具失败率 ——     multi_edit  2 次  失败 2  (100%) ⚠
+```
+
+**实测它立刻指出了两个之前完全看不到的问题**：
+
+1. **时间 98% 花在 LLM 往返，工具只占 2%** → 优化方向应该是减少 LLM 往返 /
+   提高 cache 命中，而不是优化工具实现。**这个结论直接改变了优化优先级。**
+2. **`multi_edit` 失败率 100%** → 查 trace 里的 `error` 属性拿到原因：
+   `第 1 处未找到 old_string` —— 不是工具坏了，是模型给的 `old_string`
+   与文件内容不匹配（缩进/空白差异），要改的是提示词或工具反馈设计。
+
+**成本账本**优先用 API 真实 usage（`stream_options.include_usage`），
+拿不到才退回估算并标注 `usage.source`。并且严格区分两种情况：
+
+| 情况 | 显示 |
+|---|---|
+| 模型确实免费 | `¥0.0000` |
+| 模型不在价格表里 | **「未配置单价」**（绝不显示 ¥0 —— 编造的成本数字比不显示更糟） |
+
+## 权限模型：Agent 会自主写文件，必须有闸门
+
+三层判定（`src/lib/agent/permissions.ts`，纯函数便于测试与回放）：
+
+```
+1. 敏感文件？      → 硬 deny（任何模式、任何规则都覆盖不了）
+2. 显式 deny 规则？ → deny
+3. 破坏性操作？     → ask（bypassPermissions 除外）
+4. 显式 allow/ask？ → 按规则（越具体优先级越高）
+5. 按权限模式默认策略
+```
+
+| 模式 | 读 | 写 | 执行 | 场景 |
+|---|---|---|---|---|
+| `default` | 放行 | **问** | **问** | 默认，最安全 |
+| `acceptEdits` | 放行 | 放行 | **问** | 信任编辑、但仍管命令 |
+| `plan` | 放行 | **拒** | **拒** | 只出方案，不动任何东西 |
+| `bypassPermissions` | 放行 | 放行 | 放行 | 可信环境（**敏感文件仍然拒**） |
+
+- **敏感文件硬拦截**：`.env*` / `*.pem` / `id_rsa` / `.aws/` / `.ssh/` / `credentials.*` …
+  命中即拒且不可覆盖 —— 一次提示注入就能让 Agent 把密钥写进产物
+- **破坏性操作按内容判定**（不是按工具名）：`rm -rf` / `git reset --hard` /
+  `git push --force` / `DROP TABLE` → 一律 `ask`，即使 `acceptEdits`
+- **人在环审批**：判定为 `ask` 时 Agent **暂停**（不是弹个提示继续跑），
+  前端弹卡片，用户决定后 `POST /api/approvals` 唤醒；
+  **超时按「拒绝」处理**（fail-safe，不是 fail-open）
+- **审计日志**：每次判定记 `{时间, 会话, 工具, 风险, 判定, 结果, 理由, 对象}`
+
+实测（`bun run p0:smoke`，10/10 通过）：
+
+```
+▶ plan 模式        → run_tests(execute) 被拒；且不产生审批请求（直接拒，不该问）
+▶ default 模式     → run_tests / multi_edit×2 / run_command / write_file 触发审批
+                     放行后 8 次工具调用确实执行
+▶ 可观测性         → trace 落盘、P50/P95、成本与 token、时间按类别归因
+```
+
+> 这个冒烟测试当场抓到一个真 bug：Agent「正常完成」的路径（无工具调用直接给答案）
+> `return` 时漏了收尾 trace —— 最常见的成功路径反而没有可观测性。已修。
+
+> ⚠️ **权限层不是沙箱**：`run_command` 白名单里有 `node`，而 node 是图灵完备的，
+> `node -e "require('fs').writeFileSync(...)"` 依然能绕过路径校验。
+> 权限是**纵深防御的一环**，真正的隔离要靠容器。详见
+> **[docs/OBSERVABILITY-AND-PERMISSIONS.md](docs/OBSERVABILITY-AND-PERMISSIONS.md)** 第三节。
+
 ## 目录结构
 
 ```
@@ -445,6 +519,10 @@ src/
     llm.zai.ts                # 智谱内部 SDK 实现
     mcp.ts                    # 最小 MCP 客户端（stdio JSON-RPC，零依赖手写）
     mcp-registry.ts           # MCP 服务器注册表（配置加载 / 工具发现 / 调用路由）
+    permissions.ts            # 权限模型：风险分级 + 模式 + 规则 + 敏感文件（纯函数）
+    approvals.ts              # 人在环审批：挂起 / 决定 / 超时按拒绝 / 审计日志
+    trace.ts                  # 可观测性：trace / span / 成本账本 / 聚合分析
+    trace-store.ts            # trace 落盘与读取（traces/*.json）
     prompts.ts                # 系统提示词（工具使用纪律）
     workspace.ts              # 会话沙箱管理（独立 Git 仓库 + DEVmate.md 项目记忆）
   lib/eval/                    # 评测体系（自造任务，快、可控，用于回归与消融）
@@ -481,6 +559,8 @@ scripts/bench-run.ts           # 在真实任务上跑分，产出多维报告
 scripts/bench-debug.ts         # 打印单条任务的完整轨迹（排查 Agent 卡在哪）
 scripts/mcp-demo-server.ts     # 一个真实的最小 MCP 服务器（stdio，暴露 3 个工具）
 scripts/mcp-smoke.ts           # MCP 端到端冒烟：验证 Agent 运行时发现并调用外部工具
+scripts/p0-smoke.ts            # P0 端到端冒烟：权限闸门 + HITL 审批 + 可观测性
+scripts/trace-report.ts        # 可观测性报告（延迟分位 / 成本 / 瓶颈 / 工具失败率）
 docs/EVALUATION.md             # 评测方法论（五层体系）
 docs/BENCHMARK.md              # 真实任务基准设计（五条原则如何落地 + 已知局限）
 docs/PRODUCTION-READINESS.md   # 生产落地评估（自我批评：哪些设计还比较简陋）

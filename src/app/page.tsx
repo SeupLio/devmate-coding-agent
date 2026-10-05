@@ -11,8 +11,28 @@ import { Textarea } from '@/components/ui/textarea'
 import { ToolCallCard } from '@/components/agent/ToolCallCard'
 import { WorkspacePanel } from '@/components/agent/WorkspacePanel'
 import { EvalPanel } from '@/components/agent/EvalPanel'
-import type { AgentStats, SessionInfo, SSEEvent, TodoItemUI, UIMessage } from '@/components/agent/types'
-import { Bot, Brain, GitBranch, ListChecks, Plus, Send, Sparkles, Square, User, Zap } from 'lucide-react'
+import type {
+  AgentStats,
+  PermissionModeUI,
+  SessionInfo,
+  SSEEvent,
+  TodoItemUI,
+  UIMessage,
+} from '@/components/agent/types'
+import {
+  Activity,
+  Bot,
+  Brain,
+  GitBranch,
+  ListChecks,
+  Plus,
+  Send,
+  ShieldAlert,
+  Sparkles,
+  Square,
+  User,
+  Zap,
+} from 'lucide-react'
 
 const QUICK_TASKS = [
   '修复 mathutils.js 中的 bug，使全部测试通过并提交',
@@ -31,9 +51,43 @@ export default function Home() {
   const [showReasoning, setShowReasoning] = useState(true)
   const [planMode, setPlanMode] = useState<'auto' | 'on' | 'off'>('auto')
   const [deepThinking, setDeepThinking] = useState(true)
+  /** 权限模式（P0）：default 每次写/执行都问；plan 只读；acceptEdits 自动接受编辑 */
+  const [permissionMode, setPermissionMode] = useState<PermissionModeUI>('default')
   /** 当前是否处于一段连续的「思考」中（用于把同一次思考合并成一个块） */
   const reasoningOpenRef = useRef(false)
   const [fileRefreshKey, setFileRefreshKey] = useState(0)
+
+  /**
+   * 回传人工审批决定。
+   * 失败（多半是已超时）时**如实标记为 expired**，不假装成功 ——
+   * 因为后端超时是按「拒绝」处理的，UI 必须和后端一致。
+   */
+  const decideApproval = async (msgId: string, approvalId: string, decision: 'allow' | 'deny') => {
+    setMessages((ms) =>
+      ms.map((m) =>
+        m.id === msgId && m.approval
+          ? { ...m, approval: { ...m.approval, status: decision === 'allow' ? 'allowed' : 'denied' } }
+          : m,
+      ),
+    )
+    try {
+      const r = await fetch('/api/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: approvalId, decision }),
+      })
+      if (!r.ok) {
+        setMessages((ms) =>
+          ms.map((m) =>
+            m.id === msgId && m.approval ? { ...m, approval: { ...m.approval, status: 'expired' } } : m,
+          ),
+        )
+      }
+    } catch {
+      /* 网络异常：保持已标记的本地状态 */
+    }
+  }
+
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -126,6 +180,7 @@ export default function Home() {
           task: text,
           plan: planMode === 'on' ? true : planMode === 'off' ? false : 'auto',
           thinking: deepThinking,
+          permissionMode,
         }),
         signal: controller.signal,
       })
@@ -223,6 +278,49 @@ export default function Home() {
             },
           ])
           break
+        case 'permission':
+          // 只提示被拒绝的（allow 每次都推会太吵）
+          if (ev.action === 'deny') {
+            setMessages((ms) => [
+              ...ms,
+              { id: `pd${now}`, kind: 'permission_denied', text: `${ev.tool}（${ev.risk}）：${ev.reason}` },
+            ])
+          }
+          break
+        case 'approval_required':
+          setMessages((ms) => [
+            ...ms,
+            {
+              id: `ap${now}`,
+              kind: 'approval',
+              approval: {
+                id: ev.id,
+                tool: ev.tool,
+                args: ev.args,
+                risk: ev.risk,
+                reason: ev.reason,
+                status: 'pending',
+              },
+            },
+          ])
+          break
+        case 'trace':
+          setMessages((ms) => [
+            ...ms,
+            {
+              id: `tr${now}`,
+              kind: 'trace',
+              trace: {
+                traceId: ev.traceId,
+                durationMs: ev.durationMs,
+                costCny: ev.costCny,
+                totalTokens: ev.usage.totalTokens,
+                usageSource: ev.usage.source,
+                timeByKind: ev.timeByKind,
+              },
+            },
+          ])
+          break
         case 'final':
           setStats(ev.stats)
           setMessages((ms) => {
@@ -302,7 +400,7 @@ export default function Home() {
               {messages
                 .filter((m) => showReasoning || m.kind !== 'reasoning')
                 .map((m) => (
-                  <MessageRow key={m.id} message={m} />
+                  <MessageRow key={m.id} message={m} onDecide={decideApproval} />
                 ))}
               {running && !messages.some((m) => m.kind === 'tool' && m.tool?.status === 'running') && (
                 <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -325,6 +423,34 @@ export default function Home() {
               disabled={running}
             />
             <div className="flex flex-wrap items-center gap-2">
+              {/* P0：权限模式。写/执行类操作是否需要人工确认，由它决定 */}
+              <div
+                className="flex items-center overflow-hidden rounded-full border"
+                title="权限模式：默认=写/执行都要确认；自动改=自动接受文件编辑；只读=只出方案；全放行=不拦截（慎用）"
+              >
+                {(
+                  [
+                    ['default', '默认'],
+                    ['acceptEdits', '自动改'],
+                    ['plan', '只读'],
+                    ['bypassPermissions', '全放行'],
+                  ] as [PermissionModeUI, string][]
+                ).map(([m, label]) => (
+                  <button
+                    key={m}
+                    onClick={() => setPermissionMode(m)}
+                    className={`px-2 py-0.5 text-[10px] transition-colors ${
+                      permissionMode === m
+                        ? m === 'bypassPermissions'
+                          ? 'bg-red-500 text-white'
+                          : 'bg-sky-500 text-white'
+                        : 'text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <button
                 onClick={() => setDeepThinking((v) => !v)}
                 className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
@@ -474,7 +600,13 @@ function TodoPanel({ todos }: { todos: TodoItemUI[] }) {
   )
 }
 
-function MessageRow({ message }: { message: UIMessage }) {
+function MessageRow({
+  message,
+  onDecide,
+}: {
+  message: UIMessage
+  onDecide?: (msgId: string, approvalId: string, decision: 'allow' | 'deny') => void
+}) {
   if (message.kind === 'user') {
     return (
       <div className="flex justify-end">
@@ -512,6 +644,86 @@ function MessageRow({ message }: { message: UIMessage }) {
   }
   if (message.kind === 'tool' && message.tool) {
     return <ToolCallCard tool={message.tool} />
+  }
+  // ===== P0：人在环审批卡片 =====
+  if (message.kind === 'approval' && message.approval) {
+    const a = message.approval
+    const tone =
+      a.risk === 'destructive'
+        ? 'border-red-300 bg-red-50/60'
+        : 'border-amber-300 bg-amber-50/60'
+    return (
+      <Card className={`shadow-none ${tone}`}>
+        <CardHeader className="flex flex-row items-center gap-2 py-2">
+          <ShieldAlert
+            className={`h-4 w-4 ${a.risk === 'destructive' ? 'text-red-600' : 'text-amber-600'}`}
+          />
+          <CardTitle className="text-xs">需要你确认（{a.risk}）</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 pt-0">
+          <p className="text-xs text-muted-foreground">{a.reason}</p>
+          <pre className="max-h-32 overflow-auto rounded bg-background/70 p-2 font-mono text-[10px] leading-relaxed">
+            {a.tool}
+            {'\n'}
+            {JSON.stringify(a.args, null, 2)}
+          </pre>
+          {a.status === 'pending' ? (
+            <div className="flex gap-2">
+              <Button size="sm" className="h-7 text-[11px]" onClick={() => onDecide?.(message.id, a.id, 'allow')}>
+                允许
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[11px]"
+                onClick={() => onDecide?.(message.id, a.id, 'deny')}
+              >
+                拒绝
+              </Button>
+              <span className="self-center text-[10px] text-muted-foreground">
+                超时未处理将按**拒绝**处理
+              </span>
+            </div>
+          ) : (
+            <p className="text-[11px] font-medium">
+              {a.status === 'allowed' ? '✓ 已允许' : a.status === 'denied' ? '✗ 已拒绝' : '⚠ 已超时（按拒绝处理）'}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+  if (message.kind === 'permission_denied') {
+    return (
+      <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50/50 px-3 py-2">
+        <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />
+        <p className="text-[11px] text-red-700">权限拦截 —— {message.text}</p>
+      </div>
+    )
+  }
+  // ===== P0：可观测性摘要 =====
+  if (message.kind === 'trace' && message.trace) {
+    const t = message.trace
+    const kinds = Object.entries(t.timeByKind).sort((a, b) => b[1] - a[1])
+    const total = kinds.reduce((a, [, v]) => a + v, 0) || 1
+    return (
+      <details className="rounded-md border border-dashed bg-muted/30 px-3 py-1.5">
+        <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[10px] text-muted-foreground">
+          <Activity className="h-3 w-3 text-sky-500" />
+          trace {t.traceId.slice(0, 8)}｜{(t.durationMs / 1000).toFixed(1)}s｜{t.totalTokens} token
+          {t.usageSource === 'api' ? '' : `（${t.usageSource}）`}
+        </summary>
+        <div className="mt-1.5 space-y-0.5 border-t pt-1.5 text-[10px] text-muted-foreground">
+          {kinds.map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2">
+              <span className="w-8">{k}</span>
+              <span className="h-1.5 rounded bg-sky-400/60" style={{ width: `${(v / total) * 140}px` }} />
+              <span>{(v / 1000).toFixed(1)}s</span>
+            </div>
+          ))}
+        </div>
+      </details>
+    )
   }
   if (message.kind === 'plan') {
     return (
