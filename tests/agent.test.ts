@@ -1181,4 +1181,109 @@ describe('可观测性与成本账本（P0）', () => {
     expect(sum.toolFailure['run_tests'].rate).toBeCloseTo(1 / 3, 5)
     expect(sum.latencyMs.max).toBeGreaterThanOrEqual(0)
   })
+
+  test('未知单价要能被识别（区分「免费」和「不知道」）', async () => {
+    const { hasPrice } = await import('@/lib/agent/trace')
+    expect(hasPrice('gpt-4o-mini')).toBe(true)
+    expect(hasPrice('some-model-nobody-knows')).toBe(false)
+  })
+})
+
+// ===================== P1：子 Agent 委派 =====================
+
+describe('子 Agent 委派（P1）', () => {
+  test('子 Agent 工具集**不含 task** —— 天然防无限递归', async () => {
+    const { SUBAGENT_READONLY_TOOLS } = await import('@/lib/agent/subagent')
+    expect(SUBAGENT_READONLY_TOOLS).not.toContain('task')
+  })
+
+  test('子 Agent 工具集**全是只读** —— 它不该偷偷改主任务的文件', async () => {
+    const { SUBAGENT_READONLY_TOOLS } = await import('@/lib/agent/subagent')
+    const { classifyRisk } = await import('@/lib/agent/permissions')
+    for (const t of SUBAGENT_READONLY_TOOLS) {
+      expect(classifyRisk(t)).toBe('read')
+    }
+    expect(SUBAGENT_READONLY_TOOLS).toContain('read_file')
+  })
+
+  test('结论文本必须明确标注「原文没有进入你的上下文」', async () => {
+    const { formatSubagentResult } = await import('@/lib/agent/subagent')
+    const text = formatSubagentResult(
+      {
+        summary: 'X 在 a.js:12 定义',
+        steps: 3,
+        toolCalls: 4,
+        tokensUsed: 1200,
+        durationMs: 5000,
+        toolsUsed: ['grep', 'read_file'],
+      },
+      '定位 X',
+    )
+    expect(text).toContain('定位 X')
+    expect(text).toContain('X 在 a.js:12 定义')
+    expect(text).toContain('没有')
+    expect(text).toContain('4 次工具调用')
+  })
+
+  test('task 工具已注册；委派本身被归为只读（子 Agent 不改文件）', async () => {
+    const { filterTools } = await import('@/lib/agent/tools')
+    const { classifyRisk } = await import('@/lib/agent/permissions')
+    const t = filterTools(['task'])
+    expect(t.length).toBe(1)
+    expect(t[0].function.name).toBe('task')
+    expect(t[0].function.parameters).toHaveProperty('required')
+    expect(classifyRisk('task')).toBe('read')
+  })
+})
+
+// ===================== P1：摘要式上下文压缩 =====================
+
+describe('摘要式上下文压缩（P1）', () => {
+  test('未超预算时不动', async () => {
+    const { compressContextSmart } = await import('@/lib/agent/context')
+    const r = await compressContextSmart([{ role: 'user', content: 'hi' }])
+    expect(r.compressedCount).toBe(0)
+    expect(r.summarized).toBe(false)
+  })
+
+  test('没有「大工具结果」可压时不硬压（不拿用户消息开刀）', async () => {
+    const { compressContextSmart } = await import('@/lib/agent/context')
+    const r = await compressContextSmart([{ role: 'user', content: 'x'.repeat(50_000) }])
+    expect(r.compressedCount).toBe(0)
+    expect(r.summarized).toBe(false)
+  })
+
+  test('LLM 不可用时**退回占位符方案**，不抛异常、不挂主流程', async () => {
+    const { compressContextSmart } = await import('@/lib/agent/context')
+    const savedKey = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = '' // 让摘要调用直接失败
+    try {
+      const msgs: { role: string; name?: string; content: string }[] = [
+        { role: 'system', content: 'sys' },
+      ]
+      for (let i = 0; i < 40; i++) {
+        msgs.push({ role: 'tool', name: 'read_file', content: 'y'.repeat(3000) })
+      }
+      msgs.push({ role: 'user', content: 'go' })
+      const r = await compressContextSmart(msgs as never)
+      expect(r.summarized).toBe(false) // 摘要失败
+      expect(r.compressedCount).toBeGreaterThan(0) // 但占位符方案生效了
+      expect(r.tokensAfter).toBeLessThan(r.tokensBefore)
+    } finally {
+      process.env.OPENAI_API_KEY = savedKey
+    }
+  })
+
+  test('压缩后消息条数不变（否则会破坏 tool_calls 与 tool 的配对）', async () => {
+    const { compressContext } = await import('@/lib/agent/context')
+    const msgs: { role: string; name?: string; content: string }[] = [
+      { role: 'system', content: 'sys' },
+    ]
+    for (let i = 0; i < 40; i++) {
+      msgs.push({ role: 'tool', name: 'read_file', content: 'z'.repeat(3000) })
+    }
+    msgs.push({ role: 'user', content: 'go' })
+    const r = compressContext(msgs as never)
+    expect(r.messages.length).toBe(msgs.length)
+  })
 })

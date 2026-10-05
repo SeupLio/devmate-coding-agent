@@ -1,0 +1,62 @@
+# ⚠️ 启用方式（这个文件放在 docs/ 而不是 .github/workflows/ 是有原因的）：
+#
+#   GitHub 对**工作流文件**有额外的权限要求：推送 `.github/workflows/*`
+#   需要 token 具备 `workflow` scope。本仓库当前使用的 token 只有
+#   `gist, read:org, repo`，GitHub 会返回一个**故意含糊的 404**
+#   （不是权限错误，就是 Not Found），导致无法推送工作流文件。
+#
+#   所以这份定义以普通文件形式入库（可审阅、可版本管理），启用只需两步：
+#
+#     mkdir -p .github/workflows && cp docs/ci.yml .github/workflows/ci.yml
+#     git add .github/workflows/ci.yml && git commit -m "ci: 启用 CI" && git push
+#
+#   前提：token 需要 `workflow` scope（GitHub → Settings → Developer settings →
+#   Personal access tokens 里勾选 workflow），或直接在 GitHub 网页上创建该文件。
+#
+# ---
+# CI 门禁：每次 push / PR 都必须过 typecheck + 单测 + 构建。
+#
+# 刻意**不跑**的内容（诚实说明，而不是假装没这回事）：
+#  - `bun run eval` / `bun run bench:*`：需要真实 LLM 调用与 GitHub 网络，
+#    CI 里没有密钥也不该烧钱。它们属于「发版前手动跑」的层级。
+#  - E2E：目前还没有浏览器端 E2E 测试（见 docs/PRODUCTION-READINESS.md 第 8 节）。
+#
+# 换句话说：这个门禁保证「代码没坏」，不保证「Agent 变强了」。
+# 后者要靠真实任务基准（手动跑）。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 安装依赖
+        run: bun install --frozen-lockfile
+
+      - name: 类型检查
+        run: bun run typecheck
+
+      - name: 单元测试
+        # 单测不依赖网络与密钥（MCP 测试用的是仓库自带的 demo server）
+        run: bun test tests/agent.test.ts
+
+      - name: 构建
+        # 构建需要 env，但 Next.js 在缺省时也能构建；给一份最小占位避免启动期报错
+        env:
+          OPENAI_API_KEY: ci-placeholder
+          OPENAI_MODEL: glm-4-flash
+        run: bun run build

@@ -18,7 +18,7 @@ import {
 } from './permissions'
 import { recordAudit, requestApproval } from './approvals'
 import { Tracer, type TraceRecord } from './trace'
-import { compressContext } from './context'
+import { compressContext, compressContextSmart } from './context'
 import { AGENT_SYSTEM_PROMPT, PLAN_SYSTEM_PROMPT } from './prompts'
 import { readProjectMemory } from './workspace'
 
@@ -29,7 +29,14 @@ export type AgentEvent =
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: string; ok: boolean }
   | { type: 'todos'; todos: TodoItem[] }
-  | { type: 'context'; tokensBefore: number; tokensAfter: number; compressedCount: number }
+  | {
+      type: 'context'
+      tokensBefore: number
+      tokensAfter: number
+      compressedCount: number
+      /** true = 用了 LLM 摘要（不丢信息）；false = 退回占位符截断 */
+      summarized?: boolean
+    }
   | { type: 'step_start'; step: number }
   /** 权限判定为 ask：挂起等人工决定（前端弹审批卡片） */
   | {
@@ -82,6 +89,8 @@ export interface RunAgentOptions {
   // ===== 以下开关用于对照实验（ablation），默认全部开启 =====
   /** 是否启用上下文压缩 */
   useCompression?: boolean
+  /** 压缩方式：true（默认）= LLM 摘要式（不丢信息）；false = 占位符截断（省一次 LLM 调用） */
+  useSummaryCompression?: boolean
   /** 只允许这些工具名参与编排（默认全部 7 个）；传空数组 = 无工具 */
   toolFilter?: string[]
 
@@ -343,6 +352,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     }
 
     const useCompression = opts.useCompression !== false
+    const useSummaryCompression = opts.useSummaryCompression !== false
     const chatOpts = { enableThinking: opts.thinking }
     /** 步数将尽时只提醒一次，避免每步都注入消息 */
     let nudgedLowBudget = false
@@ -386,7 +396,10 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
 
         // 上下文压缩：超预算时压缩早期工具结果
         if (useCompression) {
-          const compressed = compressContext(messages)
+          // 优先用**摘要式**压缩（LLM 提炼，不丢信息）；失败会自动退回占位符方案
+          const compressed = useSummaryCompression
+            ? await compressContextSmart(messages)
+            : compressContext(messages)
           if (compressed.compressedCount > 0) {
             messages.splice(0, messages.length, ...compressed.messages)
             queue.push({
@@ -394,6 +407,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
               tokensBefore: compressed.tokensBefore,
               tokensAfter: compressed.tokensAfter,
               compressedCount: compressed.compressedCount,
+              summarized: 'summarized' in compressed ? Boolean(compressed.summarized) : false,
             })
           }
         }

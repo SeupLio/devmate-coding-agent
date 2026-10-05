@@ -451,6 +451,30 @@ export const TOOLS: ToolDef[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'task',
+      description: [
+        '把「调研型」子任务委派给子 Agent（独立上下文，只回传结论）。',
+        '适合：在大仓库里定位某功能的实现位置、调研测试结构、找出所有相关文件、',
+        '「这个函数被谁调用了」这类需要读很多文件但只需要一个答案的任务。',
+        '不适合：需要修改文件的活（子 Agent 只有只读工具，改文件请自己用 edit_file）。',
+        '子 Agent **看不到**你的对话，所以 prompt 必须自包含。',
+      ].join(''),
+      parameters: {
+        type: 'object',
+        properties: {
+          description: { type: 'string', description: '3-5 词的简短描述（用于展示）' },
+          prompt: {
+            type: 'string',
+            description: '给子 Agent 的详细任务说明，必须自包含（它看不到你的上下文）',
+          },
+        },
+        required: ['description', 'prompt'],
+      },
+    },
+  },
 ]
 
 /** 按名称过滤工具集（对照实验用）。传 undefined = 返回全部工具；传 [] = 返回空 */
@@ -674,6 +698,15 @@ export async function executeTool(
       const norm = normalizeTodos(args.todos)
       if (!norm.ok) return `错误：${norm.error}`
       return formatTodos(norm.todos)
+    }
+    case 'task': {
+      const description = String(args.description ?? '子任务')
+      const prompt = String(args.prompt ?? '').trim()
+      if (!prompt) return '错误：task 需要 prompt（给子 Agent 的自包含任务说明）'
+      // 动态 import 打破 tools.ts ↔ loop.ts 的循环依赖
+      const { runSubagent, formatSubagentResult } = await import('./subagent')
+      const r = await runSubagent({ sessionId: ctx.sessionId, task: prompt })
+      return formatSubagentResult(r, description)
     }
     default:
       return `错误：未知工具 ${name}`

@@ -58,6 +58,9 @@ export interface PermissionContext {
 /** 只读工具：无副作用 */
 const READ_TOOLS = new Set([
   'list_files', 'read_file', 'glob', 'grep', 'search_ast', 'search_semantic',
+  // `task`（子 Agent 委派）归为只读：子 Agent 的工具集被强制限制为只读，
+  // 所以「委派调研」这个动作本身不会改动任何文件。若它真能写文件，这里必须改回 execute。
+  'task',
 ])
 
 /** 写工具：改文件内容 */

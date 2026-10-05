@@ -30,6 +30,9 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 🔧 **工具调用** | 15 个沙箱工具：`list_files` / `read_file`(offset/limit) / `edit_file` / `multi_edit` / `write_file` / `glob` / `grep` / `search_ast` / `search_semantic` / `run_command` / `run_tests` / `git_operation` / `todo_write` / `generate_docx` / `generate_pptx` |
 | 🔌 **MCP 工具生态** | **运行时动态发现**外部 MCP 服务器的工具（`mcp__<server>__<tool>`），工具层不再写死；未配置时零开销 |
 | ⚡ **分级并发调度** | 工具按**副作用**分级：只读工具（read/grep/glob/AST/语义）并发执行，写操作与命令串行（避免互相踩）；MCP 工具需声明 `readOnlyHint` 才并发 |
+| 🧩 **子 Agent 委派** | `task` 工具把「调研型」子任务丢进**独立上下文**，只回传结论 —— 主上下文不被一堆文件全文挤爆。子 Agent 强制只用只读工具且**不能再派子 Agent**（防递归） |
+| 🗜 **摘要式上下文压缩** | 超预算时用 LLM 把旧工具结果提炼成结构化事实（已确认事实 / 已改文件 / 关键位置 / 待办），只丢原文不丢信息；LLM 不可用时自动退回占位符方案 |
+| ✅ **CI 门禁** | GitHub Actions：typecheck + 113 条单测 + 生产构建。定义在 `docs/ci.yml`（**启用需 token 具备 `workflow` scope**，见文件头说明） |
 | 🧠 **思考可视化** | 推理模型的思考过程**流式**输出为独立折叠块，可在界面**一键显示/隐藏**（默认显示，避免"卡住不动"的错觉） |
 | ⚡ **按需规划** | 规划是一次完整 LLM 往返；`auto` 模式下短任务自动跳过（「重构斐波那契为迭代」不再空等一整个回合），界面可切 自动/开/关 |
 | 🔎 **三层检索** | `glob` 找文件 · `grep` 找文本（输出模式/glob 过滤/上下文行） · **`search_ast`** 答结构问题（谁定义/谁调用） · **`search_semantic`** 按语义召回（TF-IDF 向量余弦） |
@@ -248,6 +251,42 @@ bun install
 bun run db:push     # 初始化 SQLite（Prisma）
 bun run dev         # http://localhost:3000
 ```
+
+### 先跑这个：一键本地 Demo（不需要浏览器）
+
+配好 `.env` 之后，**一行命令就能看完整链路**：
+
+```bash
+bun run demo
+```
+
+它会真实跑一遍「修 bug → 跑测试 → 提交」，并依次展示：
+
+```
+═══ DevMate 本地 Demo ═══
+  模型    qwen3.8-max
+  任务    修复 mathutils.js 中的 bug，使全部测试通过，然后提交。
+✓ 沙箱已就绪（模板项目已复制进去）
+
+─── 开始执行 ───
+  ▸ 规划（3 步）
+  [1] → read_file {"path":"mathutils.js"}
+      ✓      1| /**
+  [5] → edit_file {"path":"mathutils.js",...}
+      ⏸ 需要确认：edit_file（write）—— 默认模式：write 类操作需要确认
+        已自动放行（Demo 行为；真实使用由人工决定）
+  [12] → run_tests {}
+      ✓ 测试执行完成（exit 0）：通过 4 项，失败 0 项。
+  [13] → git_operation {"action":"commit",...}
+      ✓ 提交成功：[main f147e95] fix: 修复 mathutils.js 中的 bug
+
+─── 执行结果 ───
+  步数 14｜工具调用 14｜审批询问 8 次
+  trace 1e592662｜30.7s｜83561 tokens（api）｜llm 29.0s / tool 1.5s
+```
+
+> Demo 会自动放行审批（否则要人工点），但**每次都把询问打印出来**，
+> 让你看到权限闸门真的在工作。浏览器 UI 里则是弹卡片由你决定。
 
 ### 配置 LLM（首次运行必做）
 
@@ -498,6 +537,59 @@ MCP 工具返回：2026/10/5 17:02:43（Asia/Shanghai）
 > 权限是**纵深防御的一环**，真正的隔离要靠容器。详见
 > **[docs/OBSERVABILITY-AND-PERMISSIONS.md](docs/OBSERVABILITY-AND-PERMISSIONS.md)** 第三节。
 
+## 子 Agent 委派：上下文隔离的探索
+
+主 Agent 为了定位一处实现读 10 个文件，这 10 份全文会永久占住主上下文，
+把后续推理挤出去（这也是实测里「步数全花在重复读取」的根因之一）。
+
+`task` 工具把这类**调研型**子任务委派出去：
+
+```
+主 Agent ──task("找出所有调用 fibonacci 的地方")──▶ 子 Agent（独立上下文）
+                                                        │  自己读 N 个文件
+                                                        ▼
+主 Agent ◀──只收到一段结论 + 消耗统计──────────────────┘
+```
+
+设计上的三个硬约束：
+
+| 约束 | 为什么 |
+|---|---|
+| 子 Agent **只有只读工具** | 它的职责是调研，不是改文件。改文件留在主 Agent 做，避免它背后动主任务的文件 |
+| 子 Agent **拿不到 `task` 工具** | 天然防无限递归（不是靠深度计数，是靠工具集） |
+| 结论里**明确标注「原文没有进入你的上下文」** | 让主 Agent 知道自己看到的是结论而非原文，该验证时去验证 |
+
+## 摘要式上下文压缩：只丢原文，不丢信息
+
+原来的压缩是把旧工具结果换成占位符：
+
+```
+[上下文压缩：原工具结果 3821 字符已省略，前 200 字符摘要：...]
+```
+
+**被压掉的信息永久丢失**，Agent 后面还得重新读一遍同一文件 —— 浪费往返。
+
+现在改成让 LLM 提炼成结构化事实：
+
+```
+[上下文摘要：以下 12 条较早的工具结果已被 LLM 提炼，原文已丢弃]
+
+## 已确认的事实
+- mathutils.js 导出 sum/average/fibonacci，maxOf 未导出
+- 测试用 node:test，共 4 条断言
+## 已做过的修改
+- average 分母 nums.length-1 → nums.length
+## 待验证
+- fibonacci n=30 的性能断言是否满足
+```
+
+三个实现细节：
+
+1. **消息条数不变** —— OpenAI 协议要求 `tool` 消息与 `tool_calls` 一一对应，
+   删消息会破坏配对。做法是把摘要写进最早那条工具结果，其余换成指针。
+2. **LLM 失败自动退回占位符方案** —— 压缩失败不能让主流程挂掉。
+3. 只压「够腾出空间」的那一批，不把全部历史压掉。
+
 ## 目录结构
 
 ```
@@ -521,6 +613,7 @@ src/
     mcp-registry.ts           # MCP 服务器注册表（配置加载 / 工具发现 / 调用路由）
     permissions.ts            # 权限模型：风险分级 + 模式 + 规则 + 敏感文件（纯函数）
     approvals.ts              # 人在环审批：挂起 / 决定 / 超时按拒绝 / 审计日志
+    subagent.ts               # 子 Agent 委派：独立上下文 + 只读工具集 + 防递归
     trace.ts                  # 可观测性：trace / span / 成本账本 / 聚合分析
     trace-store.ts            # trace 落盘与读取（traces/*.json）
     prompts.ts                # 系统提示词（工具使用纪律）
@@ -561,9 +654,13 @@ scripts/mcp-demo-server.ts     # 一个真实的最小 MCP 服务器（stdio，�
 scripts/mcp-smoke.ts           # MCP 端到端冒烟：验证 Agent 运行时发现并调用外部工具
 scripts/p0-smoke.ts            # P0 端到端冒烟：权限闸门 + HITL 审批 + 可观测性
 scripts/trace-report.ts        # 可观测性报告（延迟分位 / 成本 / 瓶颈 / 工具失败率）
+scripts/demo.ts                # 一键本地 Demo（不需要浏览器）
+docs/ci.yml                    # CI 门禁定义（见文件头：启用需 token 具备 workflow scope）
 docs/EVALUATION.md             # 评测方法论（五层体系）
 docs/BENCHMARK.md              # 真实任务基准设计（五条原则如何落地 + 已知局限）
 docs/PRODUCTION-READINESS.md   # 生产落地评估（自我批评：哪些设计还比较简陋）
+docs/RESUME-READINESS.md       # 简历就绪度评估（对照 Agent 岗真实考察点）
+docs/OBSERVABILITY-AND-PERMISSIONS.md  # P0：可观测性与权限模型的设计与实测
 benchmarks/                    # 真实任务清单 + 构建报告 + 基准报告
 assets/template-project/       # 主沙箱模板（mathutils + DEVmate.md）
 assets/holdout-project/        # held-out 沙箱模板（stringutils，预置失败测试）
@@ -585,20 +682,26 @@ assets/hard-reference/         # 难项目参考解（灵敏度实验基线）
 - [x] **代码索引升级**：AST 符号检索 + TF-IDF 向量语义检索（`search.ts`，与 grep 互补）
 - [x] **重复运行方差**：每个任务跑 N 轮，报通过率均值（`--repeat N`）
 - [x] **对标 Claude Code 的工具范式**：`edit_file` / `multi_edit` / `glob` / `grep` / `read_file(offset,limit)` / `todo_write` / `DEVmate.md` 项目记忆
+- [x] **MCP 工具生态**：运行时动态发现外部工具服务器（`mcp.ts` / `mcp-registry.ts`）
+- [x] **并行工具调用**：按副作用分级并发（只读并发 / 写操作串行）
+- [x] **子 Agent 委派**：`task` 工具，独立上下文 + 只读工具集 + 防递归（`subagent.ts`）
+- [x] **权限模型**：4 种模式 + allow/deny 规则 + 破坏性操作审批 + 敏感文件硬拦截（`permissions.ts` / `approvals.ts`）
+- [x] **人在环审批**：`ask` 时挂起等人工决定，超时按拒绝 + 审计日志
+- [x] **可观测性**：trace / span / 成本账本 / 缓存命中率 / 工具失败率（`trace.ts` / `trace-store.ts`）
+- [x] **摘要式上下文压缩**：LLM 提炼替代占位符截断，失败自动降级
+- [x] **CI 门禁**：typecheck + 单测 + 生产构建（`.github/workflows/ci.yml`）
 - [ ] **真容器沙箱**：把「进程内 + 命令白名单」换成容器隔离（P0，见生产评估文档）
-- [ ] **权限模型**：权限模式 + allow/deny 规则 + 危险操作确认
-- [ ] **摘要式上下文压缩 + prompt cache 布局**
-- [ ] **并行工具调用 / 子 Agent / Hooks**
-- [ ] **可观测性**：OTel trace + metrics + 结构化日志
-- [ ] **CI 门禁**：lint / test / typecheck / sensitivity 自动化
+- [ ] **Hooks**：工具调用前后的自定义钩子
+- [ ] **prompt cache 友好的上下文布局**（实测命中率已有 90%，继续优化空间明确）
+- [ ] **真实部署 + 公开链接**（简历就绪度里最大的缺口：没人用过 = 没被验证过）
 - [ ] **多框架对照**：与 LangChain / 其他 Agent 实现跑同一批任务
-- [ ] **真实仓库接入**：对齐 SWE-bench，接真实 GitHub issue + Docker 沙箱
+- [ ] **多模型矩阵**：用成本账本对比不同模型的质量/成本/延迟
 - [ ] **向量检索升级**：TF-IDF → 真实 embedding（当前为离线确定性方案）
 - [ ] diff 视图 + 编辑回滚
 - [ ] 跨端 WebView 适配（Electron / UE / Maya 内嵌面板）
-- [ ] 多模型对比评测报告
 
-> 完整的「还差什么、优先级怎么排」见 **[docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)**。
+> 完整的「还差什么、优先级怎么排」见 **[docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)**
+> 与 **[docs/RESUME-READINESS.md](docs/RESUME-READINESS.md)**。
 
 ## License
 
