@@ -13,7 +13,8 @@ server.log
 mcp.servers.json
 
 # 可观测性 trace 落盘（运行时数据，不入库）
-traces/
+# ⚠️ 必须带前导斜杠：`traces/` 会连 src/app/api/traces/ 一起忽略
+/traces/
 
 # Next.js 自动生成
 next-env.d.ts
