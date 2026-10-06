@@ -1,0 +1,456 @@
+{
+  "summary": {
+    "total": 49,
+    "solved": 46,
+    "passRate": 0.9387755102040817,
+    "avgSteps": 19.53061224489796,
+    "avgDurationMs": 158244.02040816325
+  },
+  "results": [
+    {
+      "slug": "beer-song",
+      "ok": true,
+      "passed": 8,
+      "failed": 0,
+      "total": 8,
+      "steps": 18,
+      "durationMs": 144243
+    },
+    {
+      "slug": "book-store",
+      "ok": true,
+      "passed": 17,
+      "failed": 0,
+      "total": 17,
+      "steps": 17,
+      "durationMs": 148565
+    },
+    {
+      "slug": "binary",
+      "ok": true,
+      "passed": 10,
+      "failed": 0,
+      "total": 10,
+      "steps": 20,
+      "durationMs": 176728
+    },
+    {
+      "slug": "affine-cipher",
+      "ok": true,
+      "passed": 16,
+      "failed": 0,
+      "total": 16,
+      "steps": 20,
+      "durationMs": 180076
+    },
+    {
+      "slug": "bottle-song",
+      "ok": true,
+      "passed": 7,
+      "failed": 0,
+      "total": 7,
+      "steps": 20,
+      "durationMs": 182985
+    },
+    {
+      "slug": "alphametics",
+      "ok": true,
+      "passed": 9,
+      "failed": 0,
+      "total": 9,
+      "steps": 20,
+      "durationMs": 299627
+    },
+    {
+      "slug": "forth",
+      "ok": true,
+      "passed": 49,
+      "failed": 0,
+      "total": 49,
+      "steps": 20,
+      "durationMs": 129175
+    },
+    {
+      "slug": "food-chain",
+      "ok": true,
+      "passed": 10,
+      "failed": 0,
+      "total": 10,
+      "steps": 20,
+      "durationMs": 137643
+    },
+    {
+      "slug": "complex-numbers",
+      "ok": true,
+      "passed": 31,
+      "failed": 0,
+      "total": 31,
+      "steps": 20,
+      "durationMs": 176858
+    },
+    {
+      "slug": "bowling",
+      "ok": false,
+      "passed": 23,
+      "failed": 7,
+      "total": 30,
+      "steps": 20,
+      "durationMs": 183732,
+      "reason": "7/30 用例失败"
+    },
+    {
+      "slug": "connect",
+      "ok": true,
+      "passed": 10,
+      "failed": 0,
+      "total": 10,
+      "steps": 20,
+      "durationMs": 185511
+    },
+    {
+      "slug": "grep",
+      "ok": true,
+      "passed": 25,
+      "failed": 0,
+      "total": 25,
+      "steps": 20,
+      "durationMs": 82172
+    },
+    {
+      "slug": "house",
+      "ok": true,
+      "passed": 14,
+      "failed": 0,
+      "total": 14,
+      "steps": 20,
+      "durationMs": 133362
+    },
+    {
+      "slug": "go-counting",
+      "ok": true,
+      "passed": 11,
+      "failed": 0,
+      "total": 11,
+      "steps": 20,
+      "durationMs": 168945
+    },
+    {
+      "slug": "killer-sudoku-helper",
+      "ok": true,
+      "passed": 13,
+      "failed": 0,
+      "total": 13,
+      "steps": 17,
+      "durationMs": 145245
+    },
+    {
+      "slug": "grade-school",
+      "ok": true,
+      "passed": 10,
+      "failed": 0,
+      "total": 10,
+      "steps": 20,
+      "durationMs": 166112
+    },
+    {
+      "slug": "ledger",
+      "ok": true,
+      "passed": 11,
+      "failed": 0,
+      "total": 11,
+      "steps": 17,
+      "durationMs": 120590
+    },
+    {
+      "slug": "list-ops",
+      "ok": true,
+      "passed": 20,
+      "failed": 0,
+      "total": 20,
+      "steps": 19,
+      "durationMs": 122926
+    },
+    {
+      "slug": "meetup",
+      "ok": true,
+      "passed": 95,
+      "failed": 0,
+      "total": 95,
+      "steps": 16,
+      "durationMs": 133691
+    },
+    {
+      "slug": "phone-number",
+      "ok": true,
+      "passed": 18,
+      "failed": 0,
+      "total": 18,
+      "steps": 20,
+      "durationMs": 119119
+    },
+    {
+      "slug": "ocr-numbers",
+      "ok": true,
+      "passed": 16,
+      "failed": 0,
+      "total": 16,
+      "steps": 20,
+      "durationMs": 143148
+    },
+    {
+      "slug": "parallel-letter-frequency",
+      "ok": true,
+      "passed": 13,
+      "failed": 0,
+      "total": 13,
+      "steps": 20,
+      "durationMs": 159963
+    },
+    {
+      "slug": "pig-latin",
+      "ok": true,
+      "passed": 22,
+      "failed": 0,
+      "total": 22,
+      "steps": 20,
+      "durationMs": 136081
+    },
+    {
+      "slug": "palindrome-products",
+      "ok": true,
+      "passed": 11,
+      "failed": 0,
+      "total": 12,
+      "steps": 20,
+      "durationMs": 229916
+    },
+    {
+      "slug": "poker",
+      "ok": true,
+      "passed": 28,
+      "failed": 0,
+      "total": 28,
+      "steps": 20,
+      "durationMs": 179993
+    },
+    {
+      "slug": "promises",
+      "ok": true,
+      "passed": 27,
+      "failed": 0,
+      "total": 27,
+      "steps": 20,
+      "durationMs": 178976
+    },
+    {
+      "slug": "react",
+      "ok": true,
+      "passed": 13,
+      "failed": 0,
+      "total": 13,
+      "steps": 20,
+      "durationMs": 137422
+    },
+    {
+      "slug": "queen-attack",
+      "ok": true,
+      "passed": 19,
+      "failed": 0,
+      "total": 19,
+      "steps": 20,
+      "durationMs": 187515
+    },
+    {
+      "slug": "rational-numbers",
+      "ok": false,
+      "passed": 35,
+      "failed": 1,
+      "total": 36,
+      "steps": 20,
+      "durationMs": 193825,
+      "reason": "1/36 用例失败"
+    },
+    {
+      "slug": "rectangles",
+      "ok": true,
+      "passed": 14,
+      "failed": 0,
+      "total": 14,
+      "steps": 18,
+      "durationMs": 134351
+    },
+    {
+      "slug": "say",
+      "ok": true,
+      "passed": 16,
+      "failed": 0,
+      "total": 16,
+      "steps": 18,
+      "durationMs": 155487
+    },
+    {
+      "slug": "simple-linked-list",
+      "ok": true,
+      "passed": 23,
+      "failed": 0,
+      "total": 23,
+      "steps": 20,
+      "durationMs": 121826
+    },
+    {
+      "slug": "robot-name",
+      "ok": true,
+      "passed": 8,
+      "failed": 0,
+      "total": 9,
+      "steps": 20,
+      "durationMs": 171625
+    },
+    {
+      "slug": "rest-api",
+      "ok": true,
+      "passed": 9,
+      "failed": 0,
+      "total": 9,
+      "steps": 20,
+      "durationMs": 190101
+    },
+    {
+      "slug": "resistor-color-trio",
+      "ok": true,
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "steps": 20,
+      "durationMs": 203072
+    },
+    {
+      "slug": "scale-generator",
+      "ok": true,
+      "passed": 19,
+      "failed": 0,
+      "total": 19,
+      "steps": 20,
+      "durationMs": 170794
+    },
+    {
+      "slug": "space-age",
+      "ok": true,
+      "passed": 8,
+      "failed": 0,
+      "total": 8,
+      "steps": 20,
+      "durationMs": 108172
+    },
+    {
+      "slug": "sum-of-multiples",
+      "ok": true,
+      "passed": 16,
+      "failed": 0,
+      "total": 16,
+      "steps": 19,
+      "durationMs": 107184
+    },
+    {
+      "slug": "transpose",
+      "ok": true,
+      "passed": 13,
+      "failed": 0,
+      "total": 13,
+      "steps": 20,
+      "durationMs": 103020
+    },
+    {
+      "slug": "state-of-tic-tac-toe",
+      "ok": true,
+      "passed": 27,
+      "failed": 0,
+      "total": 27,
+      "steps": 20,
+      "durationMs": 155427
+    },
+    {
+      "slug": "tournament",
+      "ok": true,
+      "passed": 12,
+      "failed": 0,
+      "total": 12,
+      "steps": 20,
+      "durationMs": 169494
+    },
+    {
+      "slug": "triangle",
+      "ok": true,
+      "passed": 19,
+      "failed": 0,
+      "total": 19,
+      "steps": 19,
+      "durationMs": 168985
+    },
+    {
+      "slug": "variable-length-quantity",
+      "ok": true,
+      "passed": 26,
+      "failed": 0,
+      "total": 26,
+      "steps": 20,
+      "durationMs": 168586
+    },
+    {
+      "slug": "wordy",
+      "ok": true,
+      "passed": 23,
+      "failed": 0,
+      "total": 23,
+      "steps": 20,
+      "durationMs": 108914
+    },
+    {
+      "slug": "twelve-days",
+      "ok": true,
+      "passed": 15,
+      "failed": 0,
+      "total": 15,
+      "steps": 19,
+      "durationMs": 186616
+    },
+    {
+      "slug": "word-search",
+      "ok": true,
+      "passed": 22,
+      "failed": 0,
+      "total": 22,
+      "steps": 20,
+      "durationMs": 152460
+    },
+    {
+      "slug": "two-bucket",
+      "ok": false,
+      "passed": 5,
+      "failed": 5,
+      "total": 10,
+      "steps": 20,
+      "durationMs": 230335,
+      "reason": "5/10 用例失败"
+    },
+    {
+      "slug": "zebra-puzzle",
+      "ok": true,
+      "passed": 2,
+      "failed": 0,
+      "total": 2,
+      "steps": 20,
+      "durationMs": 161735
+    },
+    {
+      "slug": "zipper",
+      "ok": true,
+      "passed": 19,
+      "failed": 0,
+      "total": 19,
+      "steps": 20,
+      "durationMs": 101629
+    }
+  ],
+  "at": "2026-10-06T17:00:15.570Z"
+}

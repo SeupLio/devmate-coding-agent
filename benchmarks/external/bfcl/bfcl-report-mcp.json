@@ -1,0 +1,173 @@
+{
+  "mode": "mcp",
+  "total": 120,
+  "passed": 80,
+  "results": [
+    {
+      "category": "simple_javascript",
+      "total": 40,
+      "passed": 24,
+      "accuracy": 0.6,
+      "failures": [
+        {
+          "id": "simple_javascript_2",
+          "query": "Help me extract the last transaction ID that has a status of 'completed' or 'failed' from a database log located at '/var/log/db.log', using 'utf-8' encoding, and process the information with a processing function?",
+          "detail": "缺少/参数不符的调用：extractLastTransactionId；实际调用：extractLastTransactionId({\"filepath\":\"/var/log/db.log\",\"status\":[\"completed\",\"failed\"],\"encoding\":\"utf-8\",\"processFunction\":\"processTransactionId\"})"
+        },
+        {
+          "id": "simple_javascript_5",
+          "query": "Given the manageReactState function, which encapsulates state management logic for React applications including shared state handling and performance optimization, write a line of code to initialize this function. Assume you have an initial state object `initialStateObject`, a map of reducer functions `reducersMap`, a logger middleware `loggerMiddleware`, and an application of middleware as enhancers. Also, assume the existence of custom hooks `useStateSelectorHook` and `useDispatchActionHook` for state access and updates within React components. Use applyMiddleware('myMiddleWare') as enhancers.",
+          "detail": "缺少/参数不符的调用：manageReactState；实际调用：manageReactState({\"store\":{\"initialState\":\"initialStateObject\",\"reducers\":\"reducersMap\",\"middlewares\":[\"loggerMiddleware\"],\"enhancers\":[\"applyMiddleware('myMiddleWare')\"]},\"context\":\"AppStateContext\",\"hooks\":{\"useStateSelector\":\"useStateSelectorHook\",\"useDispatchAction\":\"useDispatchActionHook\"}})"
+        },
+        {
+          "id": "simple_javascript_9",
+          "query": "Help me analyze a JSON payload `responseData` to verify if it contains a specific key for API response validation, and trigger the corresponding processing logic? You should set keyToCheck to `expectedKey` and `processKeyFunction` as processingCallBack variable",
+          "detail": "缺少/参数不符的调用：validateApiResponse；实际调用：validateApiResponse({\"jsonPayload\":{\"responseData\":{}},\"keyToCheck\":\"expectedKey\",\"processingCallback\":\"processKeyFunction\"})"
+        },
+        {
+          "id": "simple_javascript_12",
+          "query": "Help me implement a 'dataFetch' operation with an API endpoint URL of 'https://api.example.com/data', expecting the response to be a JSON object containing '{\"key\": \"value\"}', given a request configuration object '{\"method\": \"GET\"}'?",
+          "detail": "缺少/参数不符的调用：performDataFetch；实际调用：performDataFetch({\"apiEndpoint\":\"https://api.example.com/data\",\"requestConfig\":{\"method\":\"GET\"},\"expectedResponse\":{\"key\":\"value\"}})"
+        },
+        {
+          "id": "simple_javascript_13",
+          "query": "Help me generate a dynamic chart with user-provided data `userDataArray` and apply a scaling factor of 3 for the axis values, linking it to a given dashboard `dashboardElement`?",
+          "detail": "缺少/参数不符的调用：DynamicChartGenerator；实际调用：DynamicChartGenerator({\"userData\":\"\\nuserDataArray\\n\",\"scalingFactor\":3,\"dashboard\":\"dashboardElement\"})"
+        },
+        {
+          "id": "simple_javascript_14",
+          "query": "Help me generate a data accessor for a chart component named 'BarChart', with a module name 'chartModule', in a data visualization library `visualizationLibrary`, to fetch and update its 'DataPoints' and 'Labels' through a configuration object named 'config'?",
+          "detail": "缺少/参数不符的调用：chartDataAccessorFactory；实际调用：chartDataAccessorFactory({\"chart\":{\"nm\":\"BarChart\",\"mn\":\"chartModule\"},\"library\":\"visualizationLibrary\",\"configObject\":\"config\"})"
+        },
+        {
+          "id": "simple_javascript_15",
+          "query": "Help me generate a new ChartSeries with initial settings including axis labels `axisLabelsArray`, data points `dataPointsArray`, and a default color scheme `defaultColor`, and then integrate it into a specific chart layout `chartLayoutObject`?",
+          "detail": "缺少/参数不符的调用：ChartSeriesGenerator；实际调用：ChartSeriesGenerator({\"labels\":[\"axisLabelsArray\"],\"data\":[\"dataPointsArray\"],\"color\":\"defaultColor\",\"chartLayout\":{}})"
+        },
+        {
+          "id": "simple_javascript_16",
+          "query": "Help me compute the updated coordinates for a set of vertices (10, 15) and (20, 25) after rotating them around a pivot point (12, 17) by 30 degrees?",
+          "detail": "缺少/参数不符的调用：rotateVertices；实际调用：rotateVertices({\"vertices\":[[10,15],[20,25]],\"pivot\":[12,17],\"angle\":30})"
+        },
+        {
+          "id": "simple_javascript_18",
+          "query": "What is the final velocity for an object in free fall after 5 seconds, given the gravity g and initial velocity 0?",
+          "detail": "缺少/参数不符的调用：calculateFinalVelocity；实际调用：calculateFinalVelocity({\"time\":5,\"gravity\":9.8,\"initialVelocity\":0})"
+        },
+        {
+          "id": "simple_javascript_19",
+          "query": "Help me configure a ShaderMaterial for a Three.js scene with specific properties 'materialProps', using textures 'textureList', and within the 3D object 'meshObject'?",
+          "detail": "缺少/参数不符的调用：configureShaderMaterial；实际调用：configureShaderMaterial({})"
+        }
+      ],
+      "avgCalls": 1,
+      "durationMs": 56457
+    },
+    {
+      "category": "multiple",
+      "total": 40,
+      "passed": 23,
+      "accuracy": 0.575,
+      "failures": [
+        {
+          "id": "multiple_0",
+          "query": "Can I find the dimensions and properties of a triangle, if I know its three sides are 5 units, 4 units and 3 units long?",
+          "detail": "缺少/参数不符的调用：triangle_properties.get；实际调用：triangle_properties.get({\"side1\":5,\"side2\":4,\"side3\":3})"
+        },
+        {
+          "id": "multiple_3",
+          "query": "Compute the Euclidean distance between two points A(3,4) and B(1,2).",
+          "detail": "缺少/参数不符的调用：EuclideanDistance.calculate；实际调用：EuclideanDistance.calculate({\"pointA\":[3,4],\"pointB\":[1,2]})"
+        },
+        {
+          "id": "multiple_4",
+          "query": "Can you calculate the displacement of a car moving at an initial speed of 20 m/s and then accelerates at 10 m/s^2 for 5 seconds? (assuming a straight line motion)",
+          "detail": "缺少/参数不符的调用：kinematics.calculate_displacement；实际调用：kinematics.calculate_displacement({\"initial_speed\":20,\"acceleration\":10,\"time\":5})"
+        },
+        {
+          "id": "multiple_7",
+          "query": "How to assess the population growth in deer and their impact on woodland in Washington state over the past decade?",
+          "detail": "多调用了 1 个函数（期望 1 个）"
+        },
+        {
+          "id": "multiple_8",
+          "query": "Find a 3 bedroom villa for sale within $300,000 to $400,000 budget in San Diego.",
+          "detail": "缺少/参数不符的调用：realestate.find_properties；实际调用：realestate.find_properties({\"location\":\"San Diego, CA\",\"propertyType\":\"villa\",\"bedrooms\":3,\"budget\":{\"min\":300000,\"max\":400000}})"
+        },
+        {
+          "id": "multiple_9",
+          "query": "Calculate the average grade for student John who has these scores {'math':90, 'science':75, 'history':82, 'music':89} across different subjects.",
+          "detail": "缺少/参数不符的调用：calculate_average；实际调用：calculate_average({\"gradeDict\":{\"math\":90,\"science\":75,\"history\":82,\"music\":89}})"
+        },
+        {
+          "id": "multiple_10",
+          "query": "I need to delete some columns from my employees database on personal_data table. I want to remove their email addresses and social security numbers to respect privacy.",
+          "detail": "缺少/参数不符的调用：database.modify_columns；实际调用：database.create_backup({\"db_name\":\"employees\",\"backup_location\":\"/backups/employees_backup\",\"timestamp\":true})"
+        },
+        {
+          "id": "multiple_14",
+          "query": "Calculate the depreciated value of a property costing $200,000 with an annual depreciation rate of 3% for 5 years.",
+          "detail": "缺少/参数不符的调用：finance.property_depreciation；实际调用：finance.property_depreciation({\"initial_cost\":200000,\"depreciation_rate\":3,\"years\":5})"
+        },
+        {
+          "id": "multiple_20",
+          "query": "What is the price to commission a sculpture made of marble with a size of 3 feet?",
+          "detail": "缺少/参数不符的调用：sculpture_price.calculate；实际调用：sculpture_price.calculate({\"material\":\"marble\",\"size\":3})"
+        },
+        {
+          "id": "multiple_21",
+          "query": "I want to generate a sound of 440Hz frequency for 5 seconds. What is the function and how can I use it?",
+          "detail": "缺少/参数不符的调用：generate_sound_wave；实际调用：(无)"
+        }
+      ],
+      "avgCalls": 1.05,
+      "durationMs": 61032
+    },
+    {
+      "category": "parallel",
+      "total": 40,
+      "passed": 33,
+      "accuracy": 0.825,
+      "failures": [
+        {
+          "id": "parallel_8",
+          "query": "Fetch the population of New York City, NY,  and Los Angeles, CA from US Census Database, and also get the population data for Alaska state and USA",
+          "detail": "缺少/参数不符的调用：database_us_census.get_population, database_us_census.get_population, database_us_census.get_population, database_us_census.get_population；实际调用：database_us_census.get_population({\"area\":\"New York City\",\"type\":\"city\"}) | database_us_census.get_population({\"area\":\"Los Angeles\",\"type\":\"city\"}) | database_us_census.get_population({\"area\":\"Alaska\",\"type\":\"state\"}) | database_us_census.get_population({\"area\":\"USA\",\"type\":\"country\"})"
+        },
+        {
+          "id": "parallel_9",
+          "query": "Find two movie theatres near San Diego with availability for Tenet at 5 pm and No Time To Die at 7:30 pm.",
+          "detail": "缺少/参数不符的调用：find_movie_showing, find_movie_showing；实际调用：find_movie_showing({\"location\":\"San Diego, CA\",\"movie\":[\"Tenet\",\"No Time To Die\"],\"time\":[\"5 pm\",\"7:30 pm\"]})"
+        },
+        {
+          "id": "parallel_19",
+          "query": "Calculate the monthly mortgage payment for a loan amount of $400,000, with an annual interest rate of 4% and a loan term of 15, 20 and 30 years.",
+          "detail": "缺少/参数不符的调用：calculate_mortgage_payment, calculate_mortgage_payment, calculate_mortgage_payment；实际调用：calculate_mortgage_payment({\"loan_amount\":400000,\"interest_rate\":4,\"loan_term\":15}) | calculate_mortgage_payment({\"loan_amount\":400000,\"interest_rate\":4,\"loan_term\":20}) | calculate_mortgage_payment({\"loan_amount\":400000,\"interest_rate\":4,\"loan_term\":30})"
+        },
+        {
+          "id": "parallel_26",
+          "query": "Find details of lawsuits with case numbers '67813', '71249' filed in the New York District court for type 'Civil' and 'Criminal' cases.",
+          "detail": "缺少/参数不符的调用：court_case.find, court_case.find, court_case.find, court_case.find；实际调用：court_case.find({\"location\":\"New York District Court\",\"case_number\":[\"67813\",\"71249\"],\"case_type\":\"Civil\"}) | court_case.find({\"location\":\"New York District Court\",\"case_number\":[\"67813\",\"71249\"],\"case_type\":\"Criminal\"})"
+        },
+        {
+          "id": "parallel_29",
+          "query": "Find out how much waste a family of four generates in Los Angeles, assuming two children and two adults. Also, calculate waste production for a bachelor in New York.",
+          "detail": "缺少/参数不符的调用：waste_calculation.calculate, waste_calculation.calculate；实际调用：waste_calculation.calculate({\"population\":{\"adults\":2,\"children\":2,\"singles\":0},\"location\":\"Los Angeles\"}) | waste_calculation.calculate({\"population\":{\"adults\":0,\"children\":0,\"singles\":1},\"location\":\"New York\"})"
+        },
+        {
+          "id": "parallel_32",
+          "query": "Provide me the major events during the presidency of Abraham Lincoln and George Washington.",
+          "detail": "缺少/参数不符的调用：us_history.events_by_presidency, us_history.events_by_presidency；实际调用：us_history.events_by_presidency({\"president_name\":\"Abraham Lincoln\"}) | us_history.events_by_presidency({\"president_name\":\"George Washington\"})"
+        },
+        {
+          "id": "parallel_38",
+          "query": "What's the driving distance between New York and Washington DC, and between Los Angeles and San Francisco with optional parameter shortest route enabled?",
+          "detail": "缺少/参数不符的调用：calc_distance；实际调用：calc_distance({\"start_loc\":\"New York\",\"end_loc\":\"Washington DC\"}) | calc_distance({\"start_loc\":\"Los Angeles\",\"end_loc\":\"San Francisco\",\"shortest_route\":true})"
+        }
+      ],
+      "avgCalls": 2.325,
+      "durationMs": 92404
+    }
+  ],
+  "at": "2026-10-06T16:30:43.603Z"
+}

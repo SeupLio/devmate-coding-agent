@@ -1546,3 +1546,159 @@ describe('跨端宿主适配（bridge）', () => {
     expect(info.capabilities.download).toBe(true)
   })
 })
+
+// ===================== 外部权威基准：BFCL 判分器 =====================
+
+describe('BFCL 判分器（权威基准适配）', () => {
+  test('解析 JSONL（BFCL 的 .json 实际是每行一个对象）', async () => {
+    const { parseJsonl } = await import('@/lib/bench/bfcl')
+    const rows = parseJsonl('{"id":"a"}\n{"id":"b"}\n\n{bad json}\n')
+    expect(rows.length).toBe(2)
+    expect((rows[0] as { id: string }).id).toBe('a')
+  })
+
+  test('Python 风格类型名归一化成 JSON Schema', async () => {
+    const { normalizeType } = await import('@/lib/bench/bfcl')
+    expect(normalizeType('dict')).toBe('object')
+    expect(normalizeType('String')).toBe('string')
+    expect(normalizeType('float')).toBe('number')
+    expect(normalizeType('array')).toBe('array')
+    expect(normalizeType(undefined)).toBe('string')
+  })
+
+  test('irrelevance：不调用任何函数才算通过', async () => {
+    const { gradeCase } = await import('@/lib/bench/bfcl')
+    expect(gradeCase(null, []).pass).toBe(true)
+    expect(gradeCase(null, [{ name: 'x', args: {} }]).pass).toBe(false)
+  })
+
+  test('参数值落在允许列表内即算命中（含类型归一化）', async () => {
+    const { gradeCase } = await import('@/lib/bench/bfcl')
+    const gt = [{ f: { a: ['x'], n: [20] } }] as never
+    // 数字用字符串表示也应命中
+    expect(gradeCase(gt, [{ name: 'f', args: { a: 'x', n: '20' } }]).pass).toBe(true)
+    // 参数值不在允许列表 → 失败
+    expect(gradeCase(gt, [{ name: 'f', args: { a: 'y', n: 20 } }]).pass).toBe(false)
+  })
+
+  test('嵌套数组参数（BFCL 常见形态）能正确匹配', async () => {
+    const { gradeCase } = await import('@/lib/bench/bfcl')
+    const gt = [{ f: { status: [['completed', 'failed']] } }] as never
+    expect(gradeCase(gt, [{ name: 'f', args: { status: ['completed', 'failed'] } }]).pass).toBe(true)
+  })
+
+  test('多调用：少调、多调都算失败（防止「全调一遍」蒙对）', async () => {
+    const { gradeCase } = await import('@/lib/bench/bfcl')
+    const gt = [{ a: { p: [1] } }, { b: { q: [2] } }] as never
+    expect(gradeCase(gt, [{ name: 'a', args: { p: 1 } }]).pass).toBe(false) // 少一个
+    expect(
+      gradeCase(gt, [
+        { name: 'a', args: { p: 1 } },
+        { name: 'b', args: { q: 2 } },
+        { name: 'c', args: {} },
+      ]).pass,
+    ).toBe(false) // 多一个
+    expect(
+      gradeCase(gt, [
+        { name: 'b', args: { q: 2 } },
+        { name: 'a', args: { p: 1 } },
+      ]).pass,
+    ).toBe(true) // 顺序无关
+  })
+
+  test('空字符串是通配（与官方 checker 的 `""` 语义一致）', async () => {
+    const { gradeCase } = await import('@/lib/bench/bfcl')
+    expect(gradeCase([{ f: { a: [''] } }] as never, [{ name: 'f', args: { a: '任意值' } }]).pass).toBe(true)
+  })
+
+  test('函数名不对 → 失败', async () => {
+    const { gradeCase } = await import('@/lib/bench/bfcl')
+    expect(gradeCase([{ f: { a: [1] } }] as never, [{ name: 'g', args: { a: 1 } }]).pass).toBe(false)
+  })
+
+  test('BFCL 数据集已下载且可解析（若存在）', async () => {
+    const { parseJsonl, buildCases } = await import('@/lib/bench/bfcl')
+    const fs = await import('node:fs')
+    const p = path.join(process.cwd(), 'benchmarks', 'external', 'bfcl', 'BFCL_v4_parallel.json')
+    if (!fs.existsSync(p)) return // 未下载则跳过（不联网）
+    const rows = parseJsonl(fs.readFileSync(p, 'utf-8'))
+    expect(rows.length).toBeGreaterThan(0)
+    const ans = path.join(process.cwd(), 'benchmarks', 'external', 'bfcl', 'possible_answer', 'BFCL_v4_parallel.json')
+    const cases = buildCases(rows, parseJsonl(fs.readFileSync(ans, 'utf-8')), 'parallel')
+    expect(cases.length).toBe(rows.length)
+    expect(cases[0].groundTruth).not.toBeUndefined()
+  })
+})
+
+// ===================== 外部权威基准：polyglot 适配 =====================
+
+describe('polyglot-benchmark 适配', () => {
+  const EX_ROOT = path.join(
+    process.cwd(), 'benchmarks', 'external', 'polyglot',
+    'polyglot-benchmark-main', 'javascript', 'exercises', 'practice',
+  )
+
+  test('启用被跳过的测试（xtest → test）—— 否则不写代码也能「全绿」', async () => {
+    const { enableAllTests } = await import('@/lib/bench/polyglot')
+    const src = "test('a', () => 1)\nxtest('b', () => 2)\nxit('c', () => 3)\n"
+    const r = enableAllTests(src)
+    expect(r.enabled).toBe(2)
+    expect(r.code).toContain("test('b'")
+    expect(r.code).toContain("it('c'")
+    expect(r.code).not.toContain('xtest(')
+  })
+
+  test('prepareExercise 必须清掉沙箱里的模板（DEVmate.md 会误导 ESM 练习）', async () => {
+    const { prepareExercise, listExercises, clearTemplate } = await import('@/lib/bench/polyglot')
+    const fs2 = await import('node:fs')
+    if (!fs2.existsSync(EX_ROOT)) return
+    const ex = listExercises(EX_ROOT).find((e) => e.slug === 'binary')!
+    const tmp = path.join(process.cwd(), 'workspace', '_test-polyglot-prep')
+    fs2.mkdirSync(tmp, { recursive: true })
+    // 模拟 createWorkspace 留下的模板
+    fs2.writeFileSync(path.join(tmp, 'DEVmate.md'), '# 保持 CommonJS', 'utf-8')
+    fs2.writeFileSync(path.join(tmp, 'mathutils.js'), 'module.exports = {}', 'utf-8')
+    expect(clearTemplate(tmp)).toBeGreaterThan(0)
+    const r = prepareExercise(ex, tmp)
+    expect(r.clearedTemplate).toBe(0) // 已清空，第二次没有可清的
+    expect(fs2.existsSync(path.join(tmp, 'DEVmate.md'))).toBe(false)
+    expect(fs2.existsSync(path.join(tmp, 'binary.js'))).toBe(true)
+    expect(r.enabledTests).toBeGreaterThan(0)
+    // 测试必须全部启用，不能残留 xtest
+    const spec = fs2.readFileSync(path.join(tmp, 'binary.spec.js'), 'utf-8')
+    expect(spec).not.toContain('xtest(')
+    fs2.rmSync(tmp, { recursive: true, force: true })
+  })
+
+  test('解析 jest --json 结果', async () => {
+    const { parseJestJson } = await import('@/lib/bench/polyglot')
+    const ok = parseJestJson(JSON.stringify({ numPassedTests: 5, numFailedTests: 0, numTotalTests: 5, success: true }))
+    expect(ok?.ok).toBe(true)
+    expect(ok?.passed).toBe(5)
+    const bad = parseJestJson(JSON.stringify({ numPassedTests: 3, numFailedTests: 2, numTotalTests: 5, success: false }))
+    expect(bad?.ok).toBe(false)
+    // 零用例不算通过（防止「没跑测试」被当成成功）
+    const empty = parseJestJson(JSON.stringify({ numPassedTests: 0, numFailedTests: 0, numTotalTests: 0, success: true }))
+    expect(empty?.ok).toBe(false)
+    expect(parseJestJson('不是 json')).toBeNull()
+  })
+
+  test('题库已下载且能列出练习（若存在）', async () => {
+    const { listExercises } = await import('@/lib/bench/polyglot')
+    const fs = await import('node:fs')
+    if (!fs.existsSync(EX_ROOT)) return // 未下载则跳过
+    const exs = listExercises(EX_ROOT)
+    expect(exs.length).toBe(49)
+    expect(exs.every((e) => e.sourceFile.endsWith('.js'))).toBe(true)
+  })
+
+  test('每题都有可用的 stub 与 spec（若已下载）', async () => {
+    const { listExercises } = await import('@/lib/bench/polyglot')
+    const fs = await import('node:fs')
+    if (!fs.existsSync(EX_ROOT)) return
+    for (const e of listExercises(EX_ROOT)) {
+      expect(fs.existsSync(path.join(e.dir, e.sourceFile))).toBe(true)
+      expect(fs.existsSync(path.join(e.dir, e.specFile))).toBe(true)
+    }
+  })
+})

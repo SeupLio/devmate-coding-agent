@@ -368,6 +368,42 @@ bun scripts/check-sensitivity.ts             # L4 评测灵敏度（不需要 LL
 沙箱模板有三套：`template-project`（mathutils，单文件 3 类 bug）、`holdout-project`
 （stringutils，另一域、预置失败测试）、`hard-project`（多文件表达式计算器，含必须运行脚本才能获得期望值的任务）。换掉对应目录即可评测你自己的项目。
 
+## 外部权威基准：用别人的尺子量自己
+
+项目内的评测任务是我自己扫出来的。为了能被**外部复核**，另接了两个权威基准
+（题目与标准答案均由外部定义）：
+
+### BFCL v4（Berkeley Function Calling Leaderboard）
+
+函数调用的事实标准。实测 **200 题**（模型 `qwen3.8-max`）：
+
+| 类别 | 原生通道 | MCP 通道 | 考什么 |
+|---|---|---|---|
+| `simple_javascript` | 66.0% | 60.0% | 单函数、参数抽取 |
+| `multiple` | 58.0% | 57.5% | 多函数里选对一个 |
+| `parallel` | **84.0%** | 82.5% | 一次调**多个**函数（并发调度的前提） |
+| `irrelevance` | **92.0%** | —— | **不该调时别调** |
+| **总体** | **75.0%** (150/200) | **66.7%** (80/120) | |
+
+### Aider polyglot-benchmark（JavaScript，Exercism 题库）
+
+Aider 官方排行榜用的基准，测试由 Exercism 定义。49 题，`jest` 判分。
+实测 **解决率 93.9%（46/49）**，平均 19.5 步 / 158s。
+未通过：`bowling` 23/30、`two-bucket` 5/10、`rational-numbers` 35/36。
+⚠️ 关键对齐：Exercism 原版测试是「逐步解锁」（只有第一条是 `test`，其余 `xtest`），
+**不启用的话模型什么都不做也能全绿** —— harness 会先把测试全部启用。
+
+> 完整的「怎么跑的 / 判分器与官方的差异 / 跑不了哪些 / 踩了什么坑」
+> 见 **[docs/EXTERNAL-BENCHMARKS.md](docs/EXTERNAL-BENCHMARKS.md)**。
+> 其中记录了一个**会让结论完全反转的 harness bug**（MCP 工具名点号被替换成下划线，
+> 导致 `parallel` 从 84% 假摔到 36%）。
+
+```bash
+bun run bfcl simple_javascript,multiple,parallel,irrelevance 50   # BFCL 原生通道
+bun run bfcl simple_javascript,multiple,parallel 40 mcp           # BFCL MCP 通道
+bun run polyglot 49 6                                             # polyglot 全量
+```
+
 ## 真实任务基准（对标 SWE-bench 的方法论）
 
 上面五层评测有个致命短板：**题目全是我自己造的**——我出题、我写断言、我判分，
@@ -670,6 +706,7 @@ docs/RESUME-READINESS.md       # 简历就绪度评估（对照 Agent 岗真实�
 docs/OBSERVABILITY-AND-PERMISSIONS.md  # P0：可观测性与权限模型的设计与实测
 docs/JD-ALIGNMENT.md           # 与米哈游 AI 产品全栈开发 JD 的逐条对照与诚实缺口
 docs/HANDOVER.md               # ★ 交接文档：从零构建全过程 + 复现 + 运行 + 提交 GitHub
+docs/EXTERNAL-BENCHMARKS.md    # ★ 外部权威基准（BFCL / polyglot）的实测与诚实边界
 docs/ci.yml                    # CI 定义（启用需 token 具备 workflow scope，见文件头）
 benchmarks/                    # 真实任务清单 + 构建报告 + 基准报告
 assets/template-project/       # 主沙箱模板（mathutils + DEVmate.md）

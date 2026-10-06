@@ -16,6 +16,16 @@ mcp.servers.json
 # ⚠️ 必须带前导斜杠：`traces/` 会连 src/app/api/traces/ 一起忽略
 /traces/
 
+# === 外部基准的第三方数据（体积大，不入库；下载命令见 docs/EXTERNAL-BENCHMARKS.md）===
+# 注意：报告文件（bfcl-report-*.json / polyglot-report.json）要保留，所以规则写得具体
+benchmarks/external/bfcl/BFCL_v4_*.json
+benchmarks/external/bfcl/possible_answer/
+benchmarks/external/bfcl/_tools_current.json
+benchmarks/external/polyglot/polyglot-benchmark-main/
+benchmarks/external/polyglot/node_modules/
+benchmarks/external/polyglot/bun.lock
+benchmarks/external/polyglot.tar.gz
+
 # Next.js 自动生成
 next-env.d.ts
 
