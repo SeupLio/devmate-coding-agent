@@ -27,12 +27,16 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 🧭 **任务规划** | 结构化输出（JSON steps）先生成 3-6 步计划，前端步骤清单可视化 |
 | ✏️ **精确编辑** | **`edit_file`**（唯一性校验的字符串替换）+ **`multi_edit`**（原子多处替换）—— 对标 Claude Code，不再整文件重写 |
 | 📄 **文档产出** | **`generate_docx`**（Word 报告/方案）+ **`generate_pptx`**（PPT 汇报）—— 直接产出真正的 .docx / .pptx 交付物，工作区可下载 |
-| 🔧 **工具调用** | 15 个沙箱工具：`list_files` / `read_file`(offset/limit) / `edit_file` / `multi_edit` / `write_file` / `glob` / `grep` / `search_ast` / `search_semantic` / `run_command` / `run_tests` / `git_operation` / `todo_write` / `generate_docx` / `generate_pptx` |
+| 🔧 **工具调用** | **18 个**沙箱工具：`list_files` / `read_file`(offset/limit) / `edit_file` / `multi_edit` / `write_file` / `glob` / `grep` / `search_ast` / `search_semantic` / `search_knowledge` / `run_command` / `run_tests` / `git_operation` / `review_diff` / `task` / `todo_write` / `generate_docx` / `generate_pptx` |
 | 🔌 **MCP 工具生态** | **运行时动态发现**外部 MCP 服务器的工具（`mcp__<server>__<tool>`），工具层不再写死；未配置时零开销 |
 | ⚡ **分级并发调度** | 工具按**副作用**分级：只读工具（read/grep/glob/AST/语义）并发执行，写操作与命令串行（避免互相踩）；MCP 工具需声明 `readOnlyHint` 才并发 |
 | 🧩 **子 Agent 委派** | `task` 工具把「调研型」子任务丢进**独立上下文**，只回传结论 —— 主上下文不被一堆文件全文挤爆。子 Agent 强制只用只读工具且**不能再派子 Agent**（防递归） |
+| 🔍 **代码评审** | `review_diff` 工具 + 评审面板。**两层设计**：确定性静态检查（硬编码密钥 / 调试残留 / 改实现没改测试 / 删断言）+ LLM 语义评审（正确性 / 边界 / 安全 / 性能 / API 设计）。让模型去查 `console.log` 既费 token 又会幻觉，所以能确定性判断的事不问 LLM |
+| 📚 **知识库检索（RAG）** | `search_knowledge` 工具检索工作区 `knowledge/` 里的团队文档（规范 / 架构 / FAQ）。与代码检索互补：`search_semantic` 找**代码**，`search_knowledge` 找**文档**。离线 TF-IDF，零依赖可复现 |
+| 🔀 **VCS 抽象层** | `VcsProvider` 接口 + `GitProvider`（完整）+ `PerforceProvider`（P4 命令映射，**未在真实 P4 环境验证**）。`VCS_PROVIDER=perforce` 切换 —— 为 JD 点名的「P4 管理」留口 |
+| 🖥 **跨端 WebView** | 宿主探测（浏览器 / Electron / UE / Maya）+ 统一桥接（剪贴板 / 打开文件 / 通知 / 主题）+ **显式降级**（能力缺失返回原因，不静默失败）。探测函数是纯函数，可用假 global 单测四种宿主 |
 | 🗜 **摘要式上下文压缩** | 超预算时用 LLM 把旧工具结果提炼成结构化事实（已确认事实 / 已改文件 / 关键位置 / 待办），只丢原文不丢信息；LLM 不可用时自动退回占位符方案 |
-| ✅ **CI 门禁** | GitHub Actions：typecheck + 113 条单测 + 生产构建。定义在 `docs/ci.yml`（**启用需 token 具备 `workflow` scope**，见文件头说明） |
+| ✅ **CI 门禁** | GitHub Actions：typecheck + 136 条单测 + 生产构建。定义在 `docs/ci.yml`（**启用需 token 具备 `workflow` scope**，见文件头说明） |
 | 🧠 **思考可视化** | 推理模型的思考过程**流式**输出为独立折叠块，可在界面**一键显示/隐藏**（默认显示，避免"卡住不动"的错觉） |
 | ⚡ **按需规划** | 规划是一次完整 LLM 往返；`auto` 模式下短任务自动跳过（「重构斐波那契为迭代」不再空等一整个回合），界面可切 自动/开/关 |
 | 🔎 **三层检索** | `glob` 找文件 · `grep` 找文本（输出模式/glob 过滤/上下文行） · **`search_ast`** 答结构问题（谁定义/谁调用） · **`search_semantic`** 按语义召回（TF-IDF 向量余弦） |
@@ -45,7 +49,7 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 🌍 **真实任务基准** | **SWE-bench 式**：从真实开源仓库的**真实修复提交**自动构建任务，FAIL_TO_PASS / PASS_TO_PASS 由机器推导验证（见 [docs/BENCHMARK.md](docs/BENCHMARK.md)） |
 | 🔬 **评测自检** | 变异测试攻击评测器本身：**11 个变异体**检出率 100%；发现并修复「删测试即可通过」「伪造期望值自洽」两类作弊盲区 |
 | 🩺 **失败诊断** | 失败模式分类：把「没通过」归类为 8 种可枚举模式（未改动 / 未验证 / 超步数 / 作弊 / API 异常 …），附证据与改进建议 |
-| 🧪 **工程质量** | 67 个单元测试覆盖沙箱安全 / 工具执行 / 检索 / 编辑 / 上下文压缩 / 防作弊 / 失败分类 / 评测灵敏度 |
+| 🧪 **工程质量** | **136 个**单元测试覆盖沙箱安全 / 工具执行 / 检索 / 编辑 / 上下文压缩 / 防作弊 / 失败分类 / 评测灵敏度 |
 | 🔁 **限流韧性** | LLM 层指数退避重试（429/5xx），长评测链路不中断 |
 
 > ⚠️ **生产落地评估见 [docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)** ——
@@ -614,6 +618,9 @@ src/
     permissions.ts            # 权限模型：风险分级 + 模式 + 规则 + 敏感文件（纯函数）
     approvals.ts              # 人在环审批：挂起 / 决定 / 超时按拒绝 / 审计日志
     subagent.ts               # 子 Agent 委派：独立上下文 + 只读工具集 + 防递归
+    review.ts                 # 代码评审：确定性静态检查 + LLM 语义评审（两层）
+    knowledge.ts              # 知识库检索（RAG）：Markdown 切块 + TF-IDF + 余弦
+    vcs.ts                    # VCS 抽象层：Git 完整实现 + Perforce 命令映射
     trace.ts                  # 可观测性：trace / span / 成本账本 / 聚合分析
     trace-store.ts            # trace 落盘与读取（traces/*.json）
     prompts.ts                # 系统提示词（工具使用纪律）
@@ -661,6 +668,9 @@ docs/BENCHMARK.md              # 真实任务基准设计（五条原则如何�
 docs/PRODUCTION-READINESS.md   # 生产落地评估（自我批评：哪些设计还比较简陋）
 docs/RESUME-READINESS.md       # 简历就绪度评估（对照 Agent 岗真实考察点）
 docs/OBSERVABILITY-AND-PERMISSIONS.md  # P0：可观测性与权限模型的设计与实测
+docs/JD-ALIGNMENT.md           # 与米哈游 AI 产品全栈开发 JD 的逐条对照与诚实缺口
+docs/HANDOVER.md               # ★ 交接文档：从零构建全过程 + 复现 + 运行 + 提交 GitHub
+docs/ci.yml                    # CI 定义（启用需 token 具备 workflow scope，见文件头）
 benchmarks/                    # 真实任务清单 + 构建报告 + 基准报告
 assets/template-project/       # 主沙箱模板（mathutils + DEVmate.md）
 assets/holdout-project/        # held-out 沙箱模板（stringutils，预置失败测试）

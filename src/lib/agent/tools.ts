@@ -336,12 +336,14 @@ export const TOOLS: ToolDef[] = [
     function: {
       name: 'git_operation',
       description:
-        'Git 操作：status（状态）、diff（改动）、commit（提交，需 message）。在沙箱内真实执行 git。',
+        '版本控制操作：status（状态）、diff（改动）、log（提交历史）、commit（提交，需 message）。' +
+        '在沙箱内真实执行。底层走 VCS 抽象层：默认 Git，设 VCS_PROVIDER=perforce 可切到 Perforce（P4）。',
       parameters: {
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['status', 'diff', 'commit'] },
+          action: { type: 'string', enum: ['status', 'diff', 'log', 'commit'] },
           message: { type: 'string', description: 'commit 时的提交信息' },
+          base: { type: 'string', description: 'diff 的对比基准（Git 下默认 HEAD）' },
         },
         required: ['action'],
       },
@@ -472,6 +474,46 @@ export const TOOLS: ToolDef[] = [
           },
         },
         required: ['description', 'prompt'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'review_diff',
+      description: [
+        '对当前改动做**代码评审**，返回结构化问题清单（严重度 / 类别 / 文件:行 / 建议）与风险分。',
+        '两层评审：确定性静态检查（调试残留、硬编码密钥、改实现没改测试、删断言…）',
+        '+ LLM 语义评审（正确性、边界条件、安全、性能、API 设计）。',
+        '**在 git commit 之前调用它做自检**：先评审、按建议修完、再提交。',
+      ].join(''),
+      parameters: {
+        type: 'object',
+        properties: {
+          base: {
+            type: 'string',
+            description: '对比基准，默认 HEAD（评审未提交的改动）；传 HEAD~1 可评审上一次提交',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_knowledge',
+      description: [
+        '在**知识库**（工作区的 knowledge/ 目录）里检索文档 —— 团队规范、架构说明、FAQ、API 文档等。',
+        '与 search_semantic 的区别：search_semantic 找**代码**，search_knowledge 找**文档**。',
+        '当任务涉及「我们的约定是什么」「这个模块为什么这么设计」时用它。',
+      ].join(''),
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '检索词（自然语言或关键词）' },
+          top_k: { type: 'number', description: '返回条数，默认 5' },
+        },
+        required: ['query'],
       },
     },
   },
@@ -647,21 +689,34 @@ export async function executeTool(
     }
     case 'git_operation': {
       const action = String(args.action ?? 'status')
-      if (action === 'status') {
-        const { stdout, stderr, code } = await runInSandbox(ctx.sessionId, ['git', 'status', '--short', '-b'])
-        return code === 0 ? truncate(stdout) : `git status 失败：${stderr}`
+      // 走 VCS 抽象层：默认 Git，设 VCS_PROVIDER=perforce 可切到 P4（见 vcs.ts）
+      const { getVcsProvider } = await import('./vcs')
+      const vcs = getVcsProvider()
+      const cwd = sessionDir(ctx.sessionId)
+      try {
+        if (action === 'status') {
+          const s = await vcs.status(cwd)
+          if (!s.changes.length) return `${vcs.name}：工作区干净（${s.branch}）`
+          const lines = s.changes.map((c) => `${c.status.padEnd(3)} ${c.path}`)
+          return `${vcs.name}｜${s.branch}\n${lines.join('\n')}`
+        }
+        if (action === 'diff') {
+          const d = await vcs.diff(cwd, args.base ? String(args.base) : undefined)
+          return truncate(d || '(无改动)')
+        }
+        if (action === 'log') {
+          const entries = await vcs.log(cwd, 10)
+          if (!entries.length) return '（无提交记录）'
+          return entries.map((e) => `${e.rev}  ${e.date}  ${e.author}  ${e.subject}`).join('\n')
+        }
+        if (action === 'commit') {
+          const r = await vcs.commit(cwd, String(args.message ?? 'DevMate: update files'))
+          return r.ok ? `提交成功：${truncate(r.output)}` : `提交失败（可能无改动）：${truncate(r.output)}`
+        }
+        return `错误：未知操作 ${action}（支持 status / diff / log / commit）`
+      } catch (e) {
+        return `错误：${e instanceof Error ? e.message : String(e)}`
       }
-      if (action === 'diff') {
-        const { stdout, stderr, code } = await runInSandbox(ctx.sessionId, ['git', 'diff', 'HEAD'])
-        return code === 0 ? truncate(stdout || '(无改动)') : `git diff 失败：${stderr}`
-      }
-      if (action === 'commit') {
-        const message = String(args.message ?? 'DevMate: update files')
-        await runInSandbox(ctx.sessionId, ['git', 'add', '-A'])
-        const { stdout, stderr, code } = await runInSandbox(ctx.sessionId, ['git', 'commit', '-m', message])
-        return code === 0 ? `提交成功：${truncate(stdout)}` : `提交失败（可能无改动）：${truncate(stderr)}`
-      }
-      return `错误：未知 git 操作 ${action}`
     }
     case 'generate_docx': {
       const parsed = parseDocxSpec(args.spec)
@@ -707,6 +762,21 @@ export async function executeTool(
       const { runSubagent, formatSubagentResult } = await import('./subagent')
       const r = await runSubagent({ sessionId: ctx.sessionId, task: prompt })
       return formatSubagentResult(r, description)
+    }
+    case 'review_diff': {
+      const { reviewDiff, formatReview } = await import('./review')
+      const r = await reviewDiff(ctx.sessionId, {
+        base: args.base ? String(args.base) : undefined,
+      })
+      return formatReview(r)
+    }
+    case 'search_knowledge': {
+      const query = String(args.query ?? '').trim()
+      if (!query) return '错误：search_knowledge 需要 query'
+      const { searchKnowledge, formatKnowledgeHits } = await import('./knowledge')
+      const topK = Number.isFinite(Number(args.top_k)) ? Math.max(1, Math.min(20, Number(args.top_k))) : 5
+      const hits = searchKnowledge(sessionDir(ctx.sessionId), query, topK)
+      return formatKnowledgeHits(hits, query)
     }
     default:
       return `错误：未知工具 ${name}`

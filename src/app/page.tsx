@@ -11,6 +11,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { ToolCallCard } from '@/components/agent/ToolCallCard'
 import { WorkspacePanel } from '@/components/agent/WorkspacePanel'
 import { EvalPanel } from '@/components/agent/EvalPanel'
+import { ReviewPanel } from '@/components/agent/ReviewPanel'
+import { HostBadge } from '@/components/agent/HostBadge'
 import type {
   AgentStats,
   PermissionModeUI,
@@ -355,6 +357,8 @@ export default function Home() {
         <Badge variant="outline" className="ml-2 hidden gap-1 border-emerald-200 text-emerald-700 sm:flex">
           <GitBranch className="h-3 w-3" /> 沙箱 Git / 文件 / 终端 / 测试
         </Badge>
+        {/* 跨端宿主徽标：显示当前跑在什么 WebView 里、哪些能力降级了 */}
+        <HostBadge />
         <div className="ml-auto flex items-center gap-2">
           {stats && (
             <span className="hidden font-mono text-[10px] text-muted-foreground md:inline">
@@ -517,12 +521,16 @@ export default function Home() {
         {/* 右：工作区 / 评测 */}
         <aside className="col-span-12 min-h-0 border-l md:col-span-3">
           <Tabs defaultValue="files" className="flex h-full min-h-0 flex-col">
-            <TabsList className="mx-3 mt-2 grid w-auto grid-cols-2 shrink-0">
+            <TabsList className="mx-3 mt-2 grid w-auto grid-cols-3 shrink-0">
               <TabsTrigger value="files" className="text-xs">工作区</TabsTrigger>
+              <TabsTrigger value="review" className="text-xs">评审</TabsTrigger>
               <TabsTrigger value="eval" className="text-xs">评测</TabsTrigger>
             </TabsList>
             <TabsContent value="files" className="min-h-0 flex-1 mt-0">
               <WorkspacePanel sessionId={activeId} refreshKey={fileRefreshKey} />
+            </TabsContent>
+            <TabsContent value="review" className="min-h-0 flex-1 mt-0 overflow-auto">
+              <ReviewPanel sessionId={activeId} />
             </TabsContent>
             <TabsContent value="eval" className="min-h-0 flex-1 mt-0 overflow-auto">
               <EvalPanel />

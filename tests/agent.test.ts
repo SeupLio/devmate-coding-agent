@@ -1287,3 +1287,262 @@ describe('摘要式上下文压缩（P1）', () => {
     expect(r.messages.length).toBe(msgs.length)
   })
 })
+
+// ===================== 代码评审（对齐 JD：代码评审场景）=====================
+
+describe('代码评审（review.ts）', () => {
+  const DIFF_WITH_SECRET = [
+    'diff --git a/src/a.ts b/src/a.ts',
+    '--- a/src/a.ts',
+    '+++ b/src/a.ts',
+    '@@ -1,3 +1,6 @@',
+    ' const x = 1',
+    '+const API_KEY = "sk-abcdefghijklmnop1234"',
+    '+console.log("debug here")',
+    '+// TODO: 以后再说',
+    '+function f() { return 2 }',
+    ' ',
+  ].join('\n')
+
+  test('解析 diff 统计增删行与文件', async () => {
+    const { parseDiffStats } = await import('@/lib/agent/review')
+    const s = parseDiffStats(DIFF_WITH_SECRET)
+    expect(s.files).toBe(1)
+    expect(s.added).toBe(4)
+    expect(s.touchesSource).toBe(true)
+    expect(s.touchesTest).toBe(false)
+  })
+
+  test('能区分测试文件与源码文件', async () => {
+    const { isTestFile } = await import('@/lib/agent/review')
+    expect(isTestFile('src/a.test.ts')).toBe(true)
+    expect(isTestFile('tests/foo.ts')).toBe(true)
+    expect(isTestFile('__tests__/bar.js')).toBe(true)
+    expect(isTestFile('src/mathutils.js')).toBe(false)
+  })
+
+  test('确定性检查能抓到硬编码密钥 / 调试残留 / TODO', async () => {
+    const { staticChecks } = await import('@/lib/agent/review')
+    const f = staticChecks(DIFF_WITH_SECRET)
+    expect(f.some((x) => x.category === 'security' && x.severity === 'blocker')).toBe(true)
+    expect(f.some((x) => x.title.includes('调试输出'))).toBe(true)
+    expect(f.some((x) => x.title.includes('TODO'))).toBe(true)
+    // 全部来自确定性检查，不依赖 LLM
+    expect(f.every((x) => x.source === 'static')).toBe(true)
+  })
+
+  test('改了源码但没动测试 → 提示补测试', async () => {
+    const { staticChecks } = await import('@/lib/agent/review')
+    const diff = [
+      '+++ b/src/a.ts',
+      '@@ -1,1 +1,8 @@',
+      '+a1', '+a2', '+a3', '+a4', '+a5', '+a6',
+    ].join('\n')
+    const f = staticChecks(diff)
+    expect(f.some((x) => x.category === 'test')).toBe(true)
+  })
+
+  test('纯文档改动不误报「缺测试」', async () => {
+    const { staticChecks } = await import('@/lib/agent/review')
+    const diff = ['+++ b/README.md', '@@ -1,1 +1,8 @@', '+a', '+b', '+c', '+d', '+e', '+f'].join('\n')
+    const f = staticChecks(diff)
+    expect(f.some((x) => x.category === 'test')).toBe(false)
+  })
+
+  test('风险分：blocker 直接顶到 100', async () => {
+    const { computeRiskScore } = await import('@/lib/agent/review')
+    const mk = (s: 'blocker' | 'major' | 'minor' | 'nit') => ({
+      severity: s, category: 'correctness' as const, file: 'a', title: 't', detail: '', source: 'static' as const,
+    })
+    expect(computeRiskScore([mk('blocker')])).toBe(100)
+    expect(computeRiskScore([mk('nit')])).toBe(1)
+    expect(computeRiskScore([])).toBe(0)
+    expect(computeRiskScore([mk('major'), mk('major')])).toBe(30)
+  })
+
+  test('LLM 返回的非法枚举值会被规整，脏数据不会穿透', async () => {
+    const { normalizeLlmFindings } = await import('@/lib/agent/review')
+    const out = normalizeLlmFindings({
+      findings: [
+        { severity: 'CATASTROPHIC', category: 'vibes', file: 'a.ts', title: 'ok' },
+        { severity: 'major', category: 'correctness', title: '' }, // 无标题 → 丢弃
+      ],
+    })
+    expect(out.length).toBe(1)
+    expect(out[0].severity).toBe('minor') // 非法值回落
+    expect(out[0].category).toBe('correctness')
+  })
+
+  test('能从 markdown 包裹里抠出 JSON', async () => {
+    const { extractJson } = await import('@/lib/agent/review')
+    expect(extractJson('```json\n{"a":1}\n```')).toEqual({ a: 1 })
+    expect(extractJson('前言 {"a":2} 后语')).toEqual({ a: 2 })
+    expect(extractJson('没有 json')).toBeNull()
+  })
+})
+
+// ===================== 知识库检索（对齐 JD：知识库检索）=====================
+
+describe('知识库检索（RAG）', () => {
+  const TPL = path.join(process.cwd(), 'assets', 'template-project')
+
+  test('按 Markdown 标题切块，并保留标题路径', async () => {
+    const { chunkMarkdown } = await import('@/lib/agent/knowledge')
+    // 用真实长度的段落（<40 字符的碎片本来就不该入库，这是刻意的过滤）
+    const md = [
+      '# 提交规范',
+      '',
+      '本项目遵循 Conventional Commits，提交信息必须用祈使句、结尾不加句号。',
+      '',
+      '## type 取值',
+      '',
+      'feat 表示新增功能，fix 表示修 bug，refactor 表示重构且不改变外部行为。',
+    ].join('\n')
+    const chunks = chunkMarkdown('t.md', md)
+    expect(chunks.length).toBeGreaterThan(0)
+    expect(chunks.some((c) => c.heading.includes('提交规范'))).toBe(true)
+    expect(chunks.some((c) => c.heading.includes('type 取值'))).toBe(true)
+    // 标题路径应当是「父 / 子」的形式，便于展示与加权
+    expect(chunks.some((c) => c.heading.includes(' / '))).toBe(true)
+  })
+
+  test('过短的碎片不入库（避免污染检索结果）', async () => {
+    const { chunkMarkdown } = await import('@/lib/agent/knowledge')
+    expect(chunkMarkdown('t.md', '# 标题\n\n太短').length).toBe(0)
+  })
+
+  test('模板项目里的知识库能被索引', async () => {
+    const { buildKnowledgeIndex } = await import('@/lib/agent/knowledge')
+    const idx = buildKnowledgeIndex(TPL)
+    expect(idx.total).toBeGreaterThan(5)
+    expect(idx.files.length).toBeGreaterThanOrEqual(3)
+  })
+
+  test('检索能命中正确的小节（4 组真实问题）', async () => {
+    const { searchKnowledge } = await import('@/lib/agent/knowledge')
+    const cases: [string, string][] = [
+      ['提交规范是什么', '01-提交规范.md'],
+      ['为什么不能改成 ESM', '03-常见问题.md'],
+      ['fibonacci 性能要求', '02-架构说明.md'],
+      ['测试失败了怎么办', '03-常见问题.md'],
+    ]
+    for (const [q, expectFile] of cases) {
+      const hits = searchKnowledge(TPL, q, 3)
+      expect(hits.length).toBeGreaterThan(0)
+      expect(hits[0].chunk.file).toBe(expectFile)
+    }
+  })
+
+  test('空查询返回空结果（不瞎给）', async () => {
+    const { searchKnowledge } = await import('@/lib/agent/knowledge')
+    expect(searchKnowledge(TPL, '   ', 3)).toEqual([])
+  })
+
+  test('知识库目录不存在时安全返回空', async () => {
+    const { buildKnowledgeIndex } = await import('@/lib/agent/knowledge')
+    const idx = buildKnowledgeIndex(process.cwd(), 'definitely-not-a-real-dir')
+    expect(idx.total).toBe(0)
+  })
+})
+
+// ===================== VCS 抽象层（对齐 JD：P4 管理）=====================
+
+describe('VCS 抽象层', () => {
+  const REPO = process.cwd()
+
+  test('默认 provider 是 git', async () => {
+    const { getVcsProvider } = await import('@/lib/agent/vcs')
+    const saved = process.env.VCS_PROVIDER
+    delete process.env.VCS_PROVIDER
+    expect(getVcsProvider().name).toBe('git')
+    process.env.VCS_PROVIDER = 'perforce'
+    expect(getVcsProvider().name).toBe('perforce')
+    if (saved) process.env.VCS_PROVIDER = saved
+    else delete process.env.VCS_PROVIDER
+  })
+
+  test('GitProvider：status 与 log 可用', async () => {
+    const { GitProvider } = await import('@/lib/agent/vcs')
+    const g = new GitProvider()
+    expect(await g.available()).toBe(true)
+    const s = await g.status(REPO)
+    expect(typeof s.branch).toBe('string')
+    expect(Array.isArray(s.changes)).toBe(true)
+    const log = await g.log(REPO, 3)
+    expect(log.length).toBeGreaterThan(0)
+    expect(log[0]).toHaveProperty('rev')
+    expect(log[0]).toHaveProperty('subject')
+  })
+
+  test('PerforceProvider：p4 不可用时抛出**可操作**的错误（不假装成功）', async () => {
+    const { PerforceProvider } = await import('@/lib/agent/vcs')
+    const p = new PerforceProvider()
+    if (await p.available()) return // 本机真装了 p4 就跳过
+    await expect(p.status(REPO)).rejects.toThrow(/Perforce CLI 不可用/)
+    // 错误信息要能指导用户下一步，而不是一句「失败」
+    await expect(p.status(REPO)).rejects.toThrow(/P4PORT|安装/)
+  })
+
+  test('能力说明里明确标注 P4 实现未经真实环境验证', async () => {
+    const { PerforceProvider } = await import('@/lib/agent/vcs')
+    expect(new PerforceProvider().describe()).toContain('未在真实 P4 服务器验证')
+  })
+})
+
+// ===================== 跨端 WebView 宿主适配（对齐 JD：跨端）=====================
+
+describe('跨端宿主适配（bridge）', () => {
+  const G = {
+    browser: { navigator: { userAgent: 'Mozilla/5.0', clipboard: {} } },
+    electron: {
+      electronAPI: { copyText() {}, openFile() {}, notify() {}, getTheme: () => 'dark' },
+      navigator: { userAgent: 'Mozilla/5.0 Electron/28' },
+    },
+    ue: {
+      ue: { openAsset() {}, copyToClipboard() {}, getEditorTheme: () => 'dark' },
+      navigator: { userAgent: 'Mozilla/5.0 UnrealEngine' },
+    },
+    maya: { maya: { openFile() {}, getTheme: () => 'light' }, navigator: { userAgent: 'Mozilla/5.0' } },
+  }
+
+  test('四种宿主都能正确识别', async () => {
+    const { detectHost } = await import('@/lib/host/bridge')
+    expect(detectHost(G.browser as never).kind).toBe('browser')
+    expect(detectHost(G.electron as never).kind).toBe('electron')
+    expect(detectHost(G.ue as never).kind).toBe('ue')
+    expect(detectHost(G.maya as never).kind).toBe('maya')
+  })
+
+  test('浏览器：打开本地文件能力缺失 → 显式降级并给出原因', async () => {
+    const { detectHost, HostBridge } = await import('@/lib/host/bridge')
+    expect(detectHost(G.browser as never).capabilities.openFile).toBe(false)
+    const r = await new HostBridge(G.browser as never).openFile('a.js')
+    expect(r.ok).toBe(false)
+    expect(r.degraded).toBe(true)
+    expect(r.reason).toContain('浏览器')
+  })
+
+  test('**能力探测与能力执行必须一致**（曾经的 bug：探测 ✓ 但执行降级）', async () => {
+    const { detectHost, HostBridge } = await import('@/lib/host/bridge')
+    for (const key of ['electron', 'ue'] as const) {
+      const info = detectHost(G[key] as never)
+      if (!info.capabilities.clipboard) continue
+      const r = await new HostBridge(G[key] as never).copyText('x')
+      // 探测说有能力，执行就必须成功 —— 两边必须查同一张方法名表
+      expect(r.ok).toBe(true)
+    }
+  })
+
+  test('主题读取：宿主桥优先于媒体查询', async () => {
+    const { detectHost, readHostTheme } = await import('@/lib/host/bridge')
+    expect(readHostTheme(G.electron as never, detectHost(G.electron as never))).toBe('dark')
+    expect(readHostTheme(G.maya as never, detectHost(G.maya as never))).toBe('light')
+  })
+
+  test('无任何宿主时回落浏览器，不抛异常', async () => {
+    const { detectHost } = await import('@/lib/host/bridge')
+    const info = detectHost({} as never)
+    expect(info.kind).toBe('browser')
+    expect(info.capabilities.download).toBe(true)
+  })
+})

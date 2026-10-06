@@ -61,6 +61,10 @@ const READ_TOOLS = new Set([
   // `task`（子 Agent 委派）归为只读：子 Agent 的工具集被强制限制为只读，
   // 所以「委派调研」这个动作本身不会改动任何文件。若它真能写文件，这里必须改回 execute。
   'task',
+  // `review_diff` 只读 diff + 调 LLM 产出评审意见，不改任何文件
+  'review_diff',
+  // `search_knowledge` 只读知识库文档
+  'search_knowledge',
 ])
 
 /** 写工具：改文件内容 */

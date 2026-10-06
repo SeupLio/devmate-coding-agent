@@ -21,6 +21,7 @@
     "trace:report": "bun scripts/trace-report.ts",
     "p0:smoke": "bun scripts/p0-smoke.ts",
     "demo": "bun scripts/demo.ts",
+    "review": "bun scripts/review.ts",
     "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
