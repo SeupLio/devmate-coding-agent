@@ -53,6 +53,7 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 📌 **粘底滚动** | 流式输出自动跟随最新消息，用户往上翻阅时**不打断**；解除跟随后显示「回到底部」按钮（原来每个 token 都触发平滑滚动，动画互相打架导致"看不到新消息"） |
 | 🔁 **审批记忆** | 审批卡片可勾选「以后同类操作不再询问」→ 记进**会话级 allow 规则**。⚠️ 破坏性命令（`rm -rf`）与敏感文件仍在更前置的步骤被拦截，「记住」不会关掉这些闸门 |
 | 🧭 **对话节点导航** | 把每轮「提问 / 回复」标成可跳转节点，点击滚动到对应位置，带 scrollspy 高亮当前节点 —— 长对话里不用一路往上翻 |
+| 🛒 **电商服务商场景** | 把 Agent 能力迁移到电商业务：**7 维标签体系 + 可解释打标**（带置信度与复核标记）、**经营诊断 + 任务推荐**（按「影响÷难度」排序）、**业务知识库 RAG**（平台规则/SOP/方法论/案例）、**话术生成 + SOP 硬红线质检**、**Prompt 变体效果对比**。前端有可交互的「服务商工作台」面板 |
 | 🔁 **限流韧性** | LLM 层指数退避重试（429/5xx），长评测链路不中断 |
 
 > ⚠️ **生产落地评估见 [docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)** ——
@@ -680,6 +681,12 @@ src/
     judge.ts                  # 开放式任务的 LLM Judge（rubric + 强制引用原文）
     bfcl.ts                   # ★ BFCL v4 适配 + 判分器（Berkeley 函数调用权威基准）
     polyglot.ts               # ★ Aider polyglot-benchmark（Exercism JS）适配
+  lib/ecom/                     # ★ 电商服务商垂直场景
+    taxonomy.ts               # 7 维标签体系（含判定口径）
+    tagging.ts                # 打标引擎（规则优先 + 置信度 + 可解释）
+    diagnosis.ts              # 经营诊断 + 任务推荐（按影响/难度排序）
+    script.ts                 # 话术生成 + 质检 + Prompt 变体对比
+    demo-data.ts              # 演示数据（合成，字段结构可对接数仓）
   lib/host/
     bridge.ts                 # ★ 跨端 WebView 宿主适配（浏览器/Electron/UE/Maya）
   lib/hooks/
@@ -713,6 +720,8 @@ docs/OBSERVABILITY-AND-PERMISSIONS.md  # P0：可观测性与权限模型的设�
 docs/JD-ALIGNMENT.md           # 与米哈游 AI 产品全栈开发 JD 的逐条对照与诚实缺口
 docs/HANDOVER.md               # ★ 交接文档：从零构建全过程 + 复现 + 运行 + 提交 GitHub
 docs/EXTERNAL-BENCHMARKS.md    # ★ 外部权威基准（BFCL / polyglot）的实测与诚实边界
+docs/ECOM-JD-ALIGNMENT.md      # ★ 与「AI 产品实习生-电商」JD 的逐条对照与诚实缺口
+docs/ECOM-PRD.md               # ★ 电商 AI 能力 PRD（场景优先级 / 指标口径 / 三阶段规划）
 benchmarks/                    # 真实任务清单 + 构建报告 + 基准报告
 benchmarks/external/           # ★ 外部基准数据（bfcl / polyglot，第三方数据已 gitignore）
 assets/template-project/       # 主沙箱模板（mathutils + DEVmate.md）

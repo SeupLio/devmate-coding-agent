@@ -16,7 +16,7 @@
 | 是什么 | **DevMate** —— 浏览器端 Coding Agent（对标 Claude Code 的产品形态） |
 | 技术栈 | Next.js 16（App Router）+ React + TypeScript + Prisma/SQLite + Bun |
 | 代码量 | `src/lib/agent` ≈ 3500 行、`src/lib/bench` ≈ 1100 行、`src/lib/eval` ≈ 1400 行、前端 ≈ 6000 行 |
-| 测试 | `bun test tests/agent.test.ts` → **157 通过 / 0 失败** |
+| 测试 | `bun test tests/agent.test.ts` → **175 通过 / 0 失败** |
 | 一句话卖点 | 用**真实仓库的真实修复提交**自动生成可验证任务，并以此证明并定位 Agent 的失败模式 |
 | 最大缺口 | 没有真实用户使用过；P4 层未在真实环境验证；沙箱不是容器 |
 
@@ -89,6 +89,22 @@
 - **修了一个真 bug**：`run_command` 的 schema 声明 command 是**数组**，但权限层原来只判
   `typeof args.command === 'string'` → 破坏性命令拦截对真实参数形态是**死代码**。
   新增 `commandToText()` 同时接受数组与字符串，并补了回归测试
+
+### 阶段 10：电商服务商垂直场景（当前）
+为了应聘**产品岗**（AI 产品实习生-电商），把已有能力**迁移**到电商业务场景 ——
+不是硬套，而是识别「哪些能力可迁移」：
+- **标签体系 + 打标引擎**（`src/lib/ecom/taxonomy.ts` / `tagging.ts`）：
+  7 维标签、每个取值带判定口径、**可解释 + 带置信度 + 低置信自动标复核**
+- **经营诊断 + 任务推荐**（`diagnosis.ts`）：4 项指标按达标线判定，
+  任务按 **「影响 ÷ 难度」** 排序（先给最好改的，商家才做得完）
+- **业务知识库**（`assets/ecom-knowledge/`，4 篇）+ 复用 `knowledge.ts` 的 RAG
+- **话术生成 + 质检 + Prompt 变体对比**（`script.ts`）：
+  5 项质检含 **SOP 硬红线**（承诺结果 / 索要密码）；3 个 Prompt 变体可同指标对比
+- **前端「服务商工作台」面板**（`EcomPanel.tsx`）+ `/api/ecom`
+- 文档：`docs/ECOM-JD-ALIGNMENT.md`（逐条对照）、`docs/ECOM-PRD.md`（PRD）
+
+⚠️ **诚实缺口**：Prompt 变体对比**未跑完** —— LLM 配额在跑之前耗尽（HTTP 429）。
+质检器（确定性部分）已用手写样本验证，但**没有真实的变体对比数据**。
 
 ---
 

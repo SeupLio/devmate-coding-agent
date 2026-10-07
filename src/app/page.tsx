@@ -12,6 +12,7 @@ import { ToolCallCard } from '@/components/agent/ToolCallCard'
 import { WorkspacePanel } from '@/components/agent/WorkspacePanel'
 import { EvalPanel } from '@/components/agent/EvalPanel'
 import { ReviewPanel } from '@/components/agent/ReviewPanel'
+import { EcomPanel } from '@/components/agent/EcomPanel'
 import { HostBadge } from '@/components/agent/HostBadge'
 import { ConversationNav } from '@/components/agent/ConversationNav'
 import { useStickToBottom } from '@/lib/hooks/use-stick-to-bottom'
@@ -542,9 +543,10 @@ export default function Home() {
         {/* 右：工作区 / 评测 */}
         <aside className="col-span-12 min-h-0 border-l md:col-span-3">
           <Tabs defaultValue="files" className="flex h-full min-h-0 flex-col">
-            <TabsList className="mx-3 mt-2 grid w-auto grid-cols-3 shrink-0">
+            <TabsList className="mx-3 mt-2 grid w-auto grid-cols-4 shrink-0">
               <TabsTrigger value="files" className="text-xs">工作区</TabsTrigger>
               <TabsTrigger value="review" className="text-xs">评审</TabsTrigger>
+              <TabsTrigger value="ecom" className="text-xs">电商</TabsTrigger>
               <TabsTrigger value="eval" className="text-xs">评测</TabsTrigger>
             </TabsList>
             <TabsContent value="files" className="min-h-0 flex-1 mt-0">
@@ -552,6 +554,9 @@ export default function Home() {
             </TabsContent>
             <TabsContent value="review" className="min-h-0 flex-1 mt-0 overflow-auto">
               <ReviewPanel sessionId={activeId} />
+            </TabsContent>
+            <TabsContent value="ecom" className="min-h-0 flex-1 mt-0 overflow-auto">
+              <EcomPanel />
             </TabsContent>
             <TabsContent value="eval" className="min-h-0 flex-1 mt-0 overflow-auto">
               <EvalPanel />

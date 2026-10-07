@@ -1816,3 +1816,223 @@ describe('对话节点导航（ConversationNav）', () => {
     expect(nodes[1].label).toBe('(回复)')
   })
 })
+
+// ===================== 电商垂直场景：标签体系 =====================
+
+describe('电商标签体系（taxonomy）', () => {
+  test('维度可查、取值可校验、中文名可查', async () => {
+    const { getDimension, isValidTagValue, tagLabel, ALL_DIMENSIONS } = await import('@/lib/ecom/taxonomy')
+    expect(getDimension('stage')?.label).toBe('线索阶段')
+    expect(isValidTagValue('stage', 'interested')).toBe(true)
+    expect(isValidTagValue('stage', '不存在的值')).toBe(false)
+    expect(tagLabel('stage', 'interested')).toBe('意向中')
+    // 查不到时原样返回，不抛错
+    expect(tagLabel('stage', 'xxx')).toBe('xxx')
+    expect(ALL_DIMENSIONS.length).toBeGreaterThanOrEqual(7)
+  })
+
+  test('每个取值都必须有 criteria（判定口径），否则运营无法对齐', async () => {
+    const { ALL_DIMENSIONS } = await import('@/lib/ecom/taxonomy')
+    for (const d of ALL_DIMENSIONS) {
+      expect(d.values.length).toBeGreaterThan(0)
+      for (const v of d.values) {
+        expect(v.criteria.length).toBeGreaterThan(0)
+        expect(v.label.length).toBeGreaterThan(0)
+      }
+    }
+  })
+})
+
+// ===================== 电商垂直场景：打标引擎 =====================
+
+describe('电商打标引擎（tagging）', () => {
+  test('规模按 GMV 硬分档，置信度 1.0（数值判定无歧义）', async () => {
+    const { tagScale } = await import('@/lib/ecom/tagging')
+    expect(tagScale({ id: 'a', monthlyGmv: 600_000 })?.value).toBe('ka')
+    expect(tagScale({ id: 'a', monthlyGmv: 200_000 })?.value).toBe('mid')
+    expect(tagScale({ id: 'a', monthlyGmv: 50_000 })?.value).toBe('long_tail')
+    expect(tagScale({ id: 'a', monthlyGmv: 600_000 })?.confidence).toBe(1)
+    // 缺数据 → 不打标（不瞎猜）
+    expect(tagScale({ id: 'a' })).toBeNull()
+  })
+
+  test('痛点：数值信号与文本信号交叉，都命中则置信度加成', async () => {
+    const { tagPainPoints } = await import('@/lib/ecom/tagging')
+    // 只有数值
+    const onlyNum = tagPainPoints({ id: 'a', conversionRate: 0.01 })
+    const convNum = onlyNum.find((t) => t.value === 'low_conversion')!
+    expect(convNum).toBeDefined()
+    expect(convNum.confidence).toBe(0.85)
+    // 数值 + 文本 → 加成
+    const both = tagPainPoints({ id: 'a', conversionRate: 0.01, note: '商家说转化率低' })
+    const convBoth = both.find((t) => t.value === 'low_conversion')!
+    expect(convBoth.confidence).toBeGreaterThan(convNum.confidence)
+    expect(convBoth.evidence).toContain('；') // 两条依据
+  })
+
+  test('健康度按「预警项个数」分档；无任何指标则不打标', async () => {
+    const { tagHealth } = await import('@/lib/ecom/tagging')
+    expect(tagHealth({ id: 'a' })).toBeNull()
+    // 4 项全达标
+    expect(
+      tagHealth({ id: 'a', conversionRate: 0.03, refundRate: 0.05, avgResponseSec: 20, traffic: 5000 })?.value,
+    ).toBe('healthy')
+    // 1 项预警
+    expect(
+      tagHealth({ id: 'a', conversionRate: 0.01, refundRate: 0.05, avgResponseSec: 20, traffic: 5000 })?.value,
+    ).toBe('at_risk')
+    // 2 项预警
+    expect(
+      tagHealth({ id: 'a', conversionRate: 0.01, refundRate: 0.15, avgResponseSec: 20, traffic: 5000 })?.value,
+    ).toBe('unhealthy')
+  })
+
+  test('优先级：高价值+有风险 或 有意向 → P0', async () => {
+    const { tagMerchant } = await import('@/lib/ecom/tagging')
+    const p0 = tagMerchant({ id: 'a', monthlyGmv: 220_000, conversionRate: 0.012, refundRate: 0.15, avgResponseSec: 95, traffic: 4200, stage: 'interested' })
+    expect(p0.tags.find((t) => t.dimension === 'priority')?.value).toBe('p0')
+    // 健康 + KA → P1（KA 始终值得每周维护，不符合 P2 的「价值一般」）
+    const kaHealthy = tagMerchant({ id: 'b', monthlyGmv: 620_000, conversionRate: 0.032, refundRate: 0.05, avgResponseSec: 25, traffic: 9200, stage: 'converted' })
+    expect(kaHealthy.tags.find((t) => t.dimension === 'priority')?.value).toBe('p1')
+    // 健康 + 长尾 → P2（这才是「价值一般、常规触达即可」）
+    const tailHealthy = tagMerchant({ id: 'c', monthlyGmv: 40_000, conversionRate: 0.03, refundRate: 0.05, avgResponseSec: 20, traffic: 4000, stage: 'converted' })
+    expect(tailHealthy.tags.find((t) => t.dimension === 'priority')?.value).toBe('p2')
+  })
+
+  test('类目：命中多类目时降置信并标记需复核', async () => {
+    const { tagCategory } = await import('@/lib/ecom/tagging')
+    const one = tagCategory({ id: 'a', note: '女装店铺' })!
+    expect(one.value).toBe('apparel')
+    expect(one.needReview).toBe(false)
+    const many = tagCategory({ id: 'a', note: '女装和面膜都做' })!
+    expect(many.needReview).toBe(true)
+    expect(many.evidence).toContain('需复核')
+  })
+
+  test('批量打标输出覆盖率与需复核比例（沉淀高质量数据的度量）', async () => {
+    const { tagBatch } = await import('@/lib/ecom/tagging')
+    const { DEMO_MERCHANTS } = await import('@/lib/ecom/demo-data')
+    const { results, summary } = tagBatch(DEMO_MERCHANTS)
+    expect(results.length).toBe(DEMO_MERCHANTS.length)
+    expect(summary.total).toBe(DEMO_MERCHANTS.length)
+    expect(summary.coverage['scale']).toBeGreaterThan(0.5)
+    // 缺数据的那条不应被打上健康度标
+    const m1006 = results.find((r) => r.merchantId === 'M1006')!
+    expect(m1006.coverage['health']).toBe(false)
+  })
+})
+
+// ===================== 电商垂直场景：经营诊断 =====================
+
+describe('电商经营诊断（diagnosis）', () => {
+  test('优先级 = 影响/难度 → 客服响应慢（好改）排在退款率高（难改）前面', async () => {
+    const { diagnose } = await import('@/lib/ecom/diagnosis')
+    const r = diagnose({ id: 'a', conversionRate: 0.012, refundRate: 0.15, avgResponseSec: 95, traffic: 4200 })
+    const problems = r.issues.filter((i) => i.severity !== 'ok')
+    expect(problems[0].metric).toBe('客服响应时长')
+    // 退款率影响大但难度高，优先级应低于客服
+    const resp = problems.find((i) => i.metric === '客服响应时长')!
+    const refund = problems.find((i) => i.metric === '退款率')!
+    expect(resp.priority).toBeGreaterThan(refund.priority)
+  })
+
+  test('数据不足时如实说明，不硬下结论', async () => {
+    const { diagnose } = await import('@/lib/ecom/diagnosis')
+    const r = diagnose({ id: 'a', monthlyGmv: 12_000 }) // 没有任何经营指标
+    expect(r.sufficient).toBe(false)
+    expect(r.missingMetrics.length).toBeGreaterThan(0)
+    expect(r.headline).toContain('数据不足')
+  })
+
+  test('健康分：critical 扣 25、warning 扣 10，最低 0', async () => {
+    const { computeScore } = await import('@/lib/ecom/diagnosis')
+    const mk = (s: 'critical' | 'warning' | 'ok') =>
+      ({ severity: s }) as never
+    expect(computeScore([])).toBe(100)
+    expect(computeScore([mk('warning')])).toBe(90)
+    expect(computeScore([mk('critical')])).toBe(75)
+    expect(computeScore([mk('critical'), mk('critical'), mk('critical'), mk('critical'), mk('critical')])).toBe(0)
+  })
+
+  test('推荐任务最多 3 条（商家做不完反而失去信任）', async () => {
+    const { diagnose } = await import('@/lib/ecom/diagnosis')
+    const r = diagnose({ id: 'a', conversionRate: 0.005, refundRate: 0.2, avgResponseSec: 200, traffic: 100 })
+    expect(r.tasks.length).toBeLessThanOrEqual(3)
+    expect(r.tasks.every((t) => ['p0', 'p1', 'p2'].includes(t.priority))).toBe(true)
+  })
+
+  test('批量诊断汇总出「最集中的问题」', async () => {
+    const { diagnoseBatch } = await import('@/lib/ecom/diagnosis')
+    const { DEMO_MERCHANTS } = await import('@/lib/ecom/demo-data')
+    const { summary } = diagnoseBatch(DEMO_MERCHANTS)
+    expect(summary.total).toBe(DEMO_MERCHANTS.length)
+    expect(summary.topIssues.length).toBeGreaterThan(0)
+    expect(summary.avgScore).toBeGreaterThan(0)
+  })
+})
+
+// ===================== 电商垂直场景：话术质检 =====================
+
+describe('电商话术质检（script）', () => {
+  test('好话术满分：有数据、有下一步、不空泛、长度合适', async () => {
+    const { checkQuality } = await import('@/lib/ecom/script')
+    const good =
+      '看到您家近30天进店4200但转化只有1.2%，同行大概在2.5%左右。我们复盘过类似女装店，' +
+      '多数是详情页缺尺码表、客服响应超60秒。要不我发您一份3分钟的对比清单？您看完觉得有用再聊。'
+    const q = checkQuality(good)
+    expect(q.score).toBe(1)
+    expect(q.hasViolation).toBe(false)
+  })
+
+  test('差话术：检出空话套话、缺数据、缺下一步', async () => {
+    const { checkQuality } = await import('@/lib/ecom/script')
+    const q = checkQuality('您好，我们是XX平台服务商，可以帮您提升店铺销量。建议您优化一下店铺运营。')
+    expect(q.score).toBeLessThan(0.6)
+    expect(q.checks.find((c) => c.id === 'not_vague')?.pass).toBe(false)
+    expect(q.checks.find((c) => c.id === 'has_numbers')?.pass).toBe(false)
+    expect(q.checks.find((c) => c.id === 'has_next_step')?.pass).toBe(false)
+  })
+
+  test('**SOP 硬红线**：承诺无法保证的结果 / 索要账号密码 必须判违规', async () => {
+    const { checkQuality } = await import('@/lib/ecom/script')
+    for (const bad of [
+      '保证让您月销翻倍，我们平台一定能帮您上首页。',
+      '麻烦把账号密码发我，我帮您看下后台数据。',
+    ]) {
+      const q = checkQuality(bad)
+      expect(q.hasViolation).toBe(true)
+      expect(q.checks.find((c) => c.id === 'no_violation')?.pass).toBe(false)
+    }
+  })
+
+  test('上下文拼装包含画像/诊断/知识库（话术要有据可依）', async () => {
+    const { buildContext } = await import('@/lib/ecom/script')
+    const ctx = buildContext({
+      merchantId: 'M1',
+      merchantName: '某女装店',
+      intent: 'diagnose',
+      tags: [{ dimension: 'scale', value: 'mid', label: '腰部', confidence: 1, evidence: '', needReview: false }],
+      diagnosis: {
+        merchantId: 'M1', headline: '转化率偏低', score: 60, sufficient: true, missingMetrics: [],
+        issues: [{ code: 'c', metric: '支付转化率', severity: 'critical', current: '1.2%', target: '≥2.5%', impact: 5, effort: 3, priority: 1.67, conclusion: '', actions: [] }],
+        tasks: [],
+      },
+      knowledge: ['转化率低先查承接而非急着投流'],
+    })
+    expect(ctx).toContain('腰部')
+    expect(ctx).toContain('支付转化率')
+    expect(ctx).toContain('转化率低先查承接')
+    expect(ctx).toContain('本次沟通意图')
+  })
+
+  test('内置 Prompt 变体至少 3 个且各有设计说明（Prompt 方案对比的前提）', async () => {
+    const { BUILTIN_VARIANTS } = await import('@/lib/ecom/script')
+    expect(BUILTIN_VARIANTS.length).toBeGreaterThanOrEqual(3)
+    for (const v of BUILTIN_VARIANTS) {
+      expect(v.rationale.length).toBeGreaterThan(10)
+      expect(v.system.length).toBeGreaterThan(50)
+    }
+    // V3 必须含反例（这是它的核心设计取向）
+    expect(BUILTIN_VARIANTS.find((v) => v.id === 'v3_roleplay')?.system).toContain('差的话术长这样')
+  })
+})
