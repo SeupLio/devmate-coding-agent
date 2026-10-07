@@ -12,6 +12,7 @@ import { callMcpTool, getMcpReadOnlySet, getMcpToolDefs, isMcpToolName } from '.
 import {
   evaluatePermission,
   extractSubject,
+  getSessionRules,
   type PermissionContext,
   type PermissionMode,
   type PermissionRule,
@@ -242,9 +243,12 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     )
 
     // ===== 权限模型 =====
+    // 注意：rules 不能在这里固定下来。用户可能在循环进行中勾选「以后同类都放行」，
+    // 那条规则存在会话级存储里，必须每次判定时动态合并（见 runTool）。
+    const baseRules = opts.permissionRules ?? []
     const permCtx: PermissionContext = {
       mode: opts.permissionMode ?? 'default',
-      rules: opts.permissionRules ?? [],
+      rules: baseRules,
       extraSensitive: opts.permissionContext?.extraSensitive,
     }
 
@@ -257,7 +261,12 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       name: string,
       args: Record<string, unknown>,
     ): Promise<{ result: string; ok: boolean }> => {
-      const decision = evaluatePermission(name, args, permCtx)
+      // 合并「启动时的规则」+「本次会话记住的规则」；会话规则更具体，放后面优先
+      const merged: PermissionContext = {
+        ...permCtx,
+        rules: [...baseRules, ...getSessionRules(sessionId)],
+      }
+      const decision = evaluatePermission(name, args, merged)
       queue.push({ type: 'permission', tool: name, action: decision.action, risk: decision.risk, reason: decision.reason })
 
       if (decision.action === 'deny') {

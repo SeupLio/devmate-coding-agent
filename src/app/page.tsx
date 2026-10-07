@@ -13,6 +13,8 @@ import { WorkspacePanel } from '@/components/agent/WorkspacePanel'
 import { EvalPanel } from '@/components/agent/EvalPanel'
 import { ReviewPanel } from '@/components/agent/ReviewPanel'
 import { HostBadge } from '@/components/agent/HostBadge'
+import { ConversationNav } from '@/components/agent/ConversationNav'
+import { useStickToBottom } from '@/lib/hooks/use-stick-to-bottom'
 import type {
   AgentStats,
   PermissionModeUI,
@@ -64,7 +66,12 @@ export default function Home() {
    * 失败（多半是已超时）时**如实标记为 expired**，不假装成功 ——
    * 因为后端超时是按「拒绝」处理的，UI 必须和后端一致。
    */
-  const decideApproval = async (msgId: string, approvalId: string, decision: 'allow' | 'deny') => {
+  const decideApproval = async (
+    msgId: string,
+    approvalId: string,
+    decision: 'allow' | 'deny',
+    remember = false,
+  ) => {
     setMessages((ms) =>
       ms.map((m) =>
         m.id === msgId && m.approval
@@ -76,7 +83,7 @@ export default function Home() {
       const r = await fetch('/api/approvals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: approvalId, decision }),
+        body: JSON.stringify({ id: approvalId, decision, remember }),
       })
       if (!r.ok) {
         setMessages((ms) =>
@@ -91,7 +98,6 @@ export default function Home() {
   }
 
   const abortRef = useRef<AbortController | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
 
   const loadSessions = useCallback(async () => {
     const res = await fetch('/api/sessions')
@@ -103,9 +109,9 @@ export default function Home() {
     loadSessions()
   }, [loadSessions])
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  // 「粘底」滚动：流式输出时自动跟到最新，但用户往上翻时不打断他
+  const dep = messages.length + (messages[messages.length - 1]?.text?.length ?? 0)
+  const { containerRef, pinned, showJumpButton, scrollToBottom } = useStickToBottom<HTMLDivElement>(dep)
 
   const openSession = async (id: string) => {
     const res = await fetch(`/api/sessions/${id}`)
@@ -397,23 +403,38 @@ export default function Home() {
 
         {/* 中：对话 */}
         <main className="col-span-12 flex min-h-0 flex-col md:col-span-7">
-          <ScrollArea className="min-h-0 flex-1 p-4">
-            {todos.length > 0 && <TodoPanel todos={todos} />}
-            {messages.length === 0 && <EmptyState onPick={(t) => setTask(t)} />}
-            <div className="space-y-3">
-              {messages
-                .filter((m) => showReasoning || m.kind !== 'reasoning')
-                .map((m) => (
-                  <MessageRow key={m.id} message={m} onDecide={decideApproval} />
-                ))}
-              {running && !messages.some((m) => m.kind === 'tool' && m.tool?.status === 'running') && (
-                <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Sparkles className="h-3.5 w-3.5 animate-pulse text-emerald-600" /> Agent 思考中…
-                </p>
-              )}
-              <div ref={bottomRef} />
-            </div>
-          </ScrollArea>
+          <div ref={containerRef} className="relative min-h-0 flex-1">
+            <ScrollArea className="h-full p-4">
+              {todos.length > 0 && <TodoPanel todos={todos} />}
+              {messages.length === 0 && <EmptyState onPick={(t) => setTask(t)} />}
+              <div className="space-y-3">
+                {messages
+                  .filter((m) => showReasoning || m.kind !== 'reasoning')
+                  .map((m) => (
+                    <MessageRow key={m.id} message={m} onDecide={decideApproval} />
+                  ))}
+                {running && !messages.some((m) => m.kind === 'tool' && m.tool?.status === 'running') && (
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Sparkles className="h-3.5 w-3.5 animate-pulse text-emerald-600" /> Agent 思考中…
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+
+            {/* 对话节点导航：点问/答可跳转到对应位置 */}
+            <ConversationNav messages={messages} containerRef={containerRef} />
+
+            {/* 解除粘底且有新内容时，显示「回到底部」按钮（不粗暴地把用户拽回去） */}
+            {!pinned && (
+              <button
+                onClick={scrollToBottom}
+                className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border bg-background/95 px-3 py-1 text-[11px] text-muted-foreground shadow-md backdrop-blur transition-colors hover:bg-muted"
+                title={showJumpButton ? '有新内容，点击回到最新' : '回到最新'}
+              >
+                ↓ {showJumpButton ? '有新消息' : '回到最新'}
+              </button>
+            )}
+          </div>
           <Separator />
           <div className="shrink-0 space-y-2 p-3">
             <Textarea
@@ -613,11 +634,13 @@ function MessageRow({
   onDecide,
 }: {
   message: UIMessage
-  onDecide?: (msgId: string, approvalId: string, decision: 'allow' | 'deny') => void
+  onDecide?: (msgId: string, approvalId: string, decision: 'allow' | 'deny', remember?: boolean) => void
 }) {
+  // 审批卡片用：勾选后「允许/拒绝」会附带 remember，让同类操作只确认一次
+  const [rememberChoice, setRememberChoice] = useState(false)
   if (message.kind === 'user') {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end" data-msg-id={message.id}>
         <div className="max-w-[85%] rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white">
           <p className="whitespace-pre-wrap break-words">{message.text}</p>
         </div>
@@ -626,7 +649,7 @@ function MessageRow({
   }
   if (message.kind === 'assistant') {
     return (
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2" data-msg-id={message.id}>
         <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted">
           <Bot className="h-3.5 w-3.5 text-emerald-600" />
         </div>
@@ -676,21 +699,37 @@ function MessageRow({
             {JSON.stringify(a.args, null, 2)}
           </pre>
           {a.status === 'pending' ? (
-            <div className="flex gap-2">
-              <Button size="sm" className="h-7 text-[11px]" onClick={() => onDecide?.(message.id, a.id, 'allow')}>
-                允许
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-[11px]"
-                onClick={() => onDecide?.(message.id, a.id, 'deny')}
-              >
-                拒绝
-              </Button>
-              <span className="self-center text-[10px] text-muted-foreground">
-                超时未处理将按**拒绝**处理
-              </span>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => onDecide?.(message.id, a.id, 'allow', rememberChoice)}
+                >
+                  允许{rememberChoice ? '（并记住）' : ''}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px]"
+                  onClick={() => onDecide?.(message.id, a.id, 'deny', rememberChoice)}
+                >
+                  拒绝{rememberChoice ? '（并记住）' : ''}
+                </Button>
+                <span className="self-center text-[10px] text-muted-foreground">
+                  超时未处理将按**拒绝**处理
+                </span>
+              </div>
+              <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 accent-emerald-600"
+                  checked={rememberChoice}
+                  onChange={(e) => setRememberChoice(e.target.checked)}
+                />
+                记住：以后同类 <span className="font-mono">{a.tool}</span> 操作不再询问
+                <span className="text-[9px] opacity-70">（危险命令仍会拦截）</span>
+              </label>
             </div>
           ) : (
             <p className="text-[11px] font-medium">

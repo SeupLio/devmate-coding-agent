@@ -1040,6 +1040,25 @@ describe('权限模型（P0）', () => {
     }
   })
 
+  test('**回归**：破坏性命令的数组形态也必须被拦（schema 声明的就是数组）', async () => {
+    // 曾经的 bug：权限层只判 typeof args.command === 'string'，
+    // 而 run_command 的 schema 声明 command 是数组 → 数组形态直接跳过检测，
+    // 破坏性拦截对真实参数是死代码。commandToText() 修好了它。
+    const { evaluatePermission, commandToText } = await P()
+    const ctx = { mode: 'acceptEdits' as const }
+    expect(commandToText(['rm', '-rf', '/tmp/x'])).toBe('rm -rf /tmp/x')
+    expect(commandToText('rm -rf /tmp/x')).toBe('rm -rf /tmp/x')
+    expect(commandToText(undefined)).toBeNull()
+
+    for (const cmd of [['rm', '-rf', '/tmp/x'], ['git', 'reset', '--hard', 'HEAD~3'], ['git', 'push', '--force', 'origin', 'main']]) {
+      const d = evaluatePermission('run_command', { command: cmd }, ctx)
+      expect(d.action).toBe('ask')
+      expect(d.risk).toBe('destructive')
+    }
+    // 数组形态的网络命令也要能检出
+    expect(evaluatePermission('run_command', { command: ['curl', 'http://x'] }, { mode: 'default' }).action).toBe('ask')
+  })
+
   test('显式 deny 规则优先于 allow 规则', async () => {
     const { evaluatePermission } = await P()
     const ctx = {
@@ -1700,5 +1719,100 @@ describe('polyglot-benchmark 适配', () => {
       expect(fs.existsSync(path.join(e.dir, e.sourceFile))).toBe(true)
       expect(fs.existsSync(path.join(e.dir, e.specFile))).toBe(true)
     }
+  })
+})
+
+// ===================== 会话级「记住的规则」（审批记忆）=====================
+
+describe('会话级审批记忆', () => {
+  test('记住的规则可以被读回、去重、清空', async () => {
+    const { addSessionRule, getSessionRules, clearSessionRules } = await import('@/lib/agent/permissions')
+    const sid = `test-${Date.now()}`
+    try {
+      expect(getSessionRules(sid)).toEqual([])
+      addSessionRule(sid, { tool: 'edit_file', action: 'allow' })
+      addSessionRule(sid, { tool: 'edit_file', action: 'allow' }) // 重复 → 不加
+      addSessionRule(sid, { tool: 'run_tests', action: 'allow' })
+      const rules = getSessionRules(sid)
+      expect(rules.length).toBe(2)
+      clearSessionRules(sid)
+      expect(getSessionRules(sid)).toEqual([])
+    } finally {
+      clearSessionRules(sid)
+    }
+  })
+
+  test('**安全性质**：记住的 allow 不能绕过破坏性命令拦截', async () => {
+    const { evaluatePermission, addSessionRule, clearSessionRules, getSessionRules } =
+      await import('@/lib/agent/permissions')
+    const sid = `test-sec-${Date.now()}`
+    try {
+      // 模拟用户勾选了「记住 run_command 的放行」
+      addSessionRule(sid, { tool: 'run_command', action: 'allow' })
+      const ctx = { mode: 'default' as const, rules: getSessionRules(sid) }
+      // 常规命令 → 放行（记住生效）
+      expect(evaluatePermission('run_command', { command: ['node', 'x.js'] }, ctx).action).toBe('allow')
+      // 破坏性命令 → **仍然要问**（第 3 步拦截在第 4 步 allow 之前）
+      expect(evaluatePermission('run_command', { command: ['rm', '-rf', '/'] }, ctx).action).toBe('ask')
+      // 敏感文件 → 仍然硬拒
+      expect(evaluatePermission('read_file', { path: '.env' }, ctx).action).toBe('deny')
+    } finally {
+      clearSessionRules(sid)
+    }
+  })
+
+  test('清空一个会话不影响其他会话的规则', async () => {
+    const { addSessionRule, getSessionRules, clearSessionRules } = await import('@/lib/agent/permissions')
+    const a = `s-a-${Date.now()}`
+    const b = `s-b-${Date.now()}`
+    try {
+      addSessionRule(a, { tool: 'edit_file', action: 'allow' })
+      addSessionRule(b, { tool: 'write_file', action: 'allow' })
+      clearSessionRules(a)
+      expect(getSessionRules(a)).toEqual([])
+      expect(getSessionRules(b).length).toBe(1)
+    } finally {
+      clearSessionRules(a)
+      clearSessionRules(b)
+    }
+  })
+})
+
+// ===================== 对话节点导航 =====================
+
+describe('对话节点导航（ConversationNav）', () => {
+  test('只把 user/assistant 抽成节点；工具/思考/审批都是过程不是骨架', async () => {
+    const { buildNavNodes } = await import('@/components/agent/ConversationNav')
+    const msgs = [
+      { id: 'u1', kind: 'user', text: '修个 bug' },
+      { id: 'r1', kind: 'reasoning', text: '让我想想…' },
+      { id: 't1', kind: 'tool', tool: { id: 'x', name: 'read_file', args: {}, status: 'done' } },
+      { id: 'a1', kind: 'assistant', text: '修好了，原因是分母少减一' },
+      { id: 'u2', kind: 'user', text: '再加个测试' },
+      { id: 'ap1', kind: 'approval', approval: { id: 'p', tool: 'edit_file', args: {}, risk: 'write', reason: '', status: 'pending' } },
+      { id: 'a2', kind: 'assistant', text: '测试加好了' },
+    ] as never
+    const nodes = buildNavNodes(msgs)
+    expect(nodes.length).toBe(4)
+    expect(nodes.map((n) => `${n.role}${n.index}`)).toEqual(['user1', 'assistant1', 'user2', 'assistant2'])
+    expect(nodes.every((n) => !n.id.startsWith('t') && !n.id.startsWith('r') && !n.id.startsWith('ap'))).toBe(true)
+  })
+
+  test('标签截断到 28 字符并压掉换行（导航条不该被长文本撑爆）', async () => {
+    const { buildNavNodes } = await import('@/components/agent/ConversationNav')
+    const long = 'x'.repeat(200) + '\n\n多行\n内容'
+    const nodes = buildNavNodes([{ id: 'u1', kind: 'user', text: long }] as never)
+    expect(nodes[0].label.length).toBeLessThanOrEqual(28)
+    expect(nodes[0].label).not.toContain('\n')
+  })
+
+  test('空文本有兜底标签', async () => {
+    const { buildNavNodes } = await import('@/components/agent/ConversationNav')
+    const nodes = buildNavNodes([
+      { id: 'u1', kind: 'user', text: '   ' },
+      { id: 'a1', kind: 'assistant', text: '' },
+    ] as never)
+    expect(nodes[0].label).toBe('(空提问)')
+    expect(nodes[1].label).toBe('(回复)')
   })
 })

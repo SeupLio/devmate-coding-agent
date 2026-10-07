@@ -134,6 +134,20 @@ export function findDestructive(command: string): string | null {
   return null
 }
 
+/**
+ * 把 run_command 的 command 参数归一化成字符串文本，用于危险命令检测。
+ *
+ * ⚠️ 这是个真实修过的 bug：run_command 的 schema 声明 command 是**数组**
+ * （`["rm","-rf","/"]`），但权限层原来只判 `typeof args.command === 'string'`
+ * —— 数组形态直接跳过了检测，等于破坏性命令拦截对真实参数是**死代码**。
+ * 这里同时接受字符串和数组两种形态。
+ */
+export function commandToText(command: unknown): string | null {
+  if (typeof command === 'string') return command
+  if (Array.isArray(command)) return command.map(String).join(' ')
+  return null
+}
+
 /** 网络访问（数据外泄面） */
 const NETWORK_PATTERNS = /\b(curl|wget|Invoke-WebRequest|nc|ncat|telnet|ssh|scp|rsync)\b/i
 
@@ -156,7 +170,8 @@ function specificity(r: PermissionRule): number {
 
 /** 从工具参数里取出「被作用的路径」或「命令文本」，用于规则匹配 */
 export function extractSubject(tool: string, args: Record<string, unknown>): string {
-  if (typeof args.command === 'string') return args.command
+  const cmdText = commandToText(args.command)
+  if (cmdText) return cmdText
   if (typeof args.path === 'string') return args.path
   if (typeof args.file_path === 'string') return args.file_path
   if (typeof args.pattern === 'string') return args.pattern
@@ -196,8 +211,11 @@ export function evaluatePermission(
       reason: `命中敏感文件保护（${path.basename(subject.replace(/\\/g, '/'))}）：禁止读取或写入凭据类文件`,
     }
   }
-  if (tool === 'run_command' && typeof args.command === 'string' && isSensitivePath(args.command)) {
-    return { action: 'deny', risk, reason: '命令中涉及敏感文件路径，已拦截' }
+  if (tool === 'run_command') {
+    const cmdText = commandToText(args.command)
+    if (cmdText && isSensitivePath(cmdText)) {
+      return { action: 'deny', risk, reason: '命令中涉及敏感文件路径，已拦截' }
+    }
   }
 
   // 2) 显式规则（deny 优先；同 action 取最具体）
@@ -211,14 +229,19 @@ export function evaluatePermission(
   }
 
   // 3) 破坏性 / 网络：不可逆操作即便在 acceptEdits 下也要问
-  if (tool === 'run_command' && typeof args.command === 'string') {
-    const dest = findDestructive(args.command)
-    if (dest && ctx.mode !== 'bypassPermissions') {
-      return { action: 'ask', risk: 'destructive', reason: `检测到不可逆操作：${dest}` }
-    }
-    const net = findNetworkUse(args.command)
-    if (net && ctx.mode !== 'bypassPermissions' && ctx.mode !== 'acceptEdits') {
-      return { action: 'ask', risk, reason: net }
+  if (tool === 'run_command') {
+    // commandToText 同时接受数组（schema 声明的形态）和字符串，
+    // 否则破坏性拦截对真实参数形态是死代码（见 commandToText 的注释）
+    const cmdText = commandToText(args.command)
+    if (cmdText) {
+      const dest = findDestructive(cmdText)
+      if (dest && ctx.mode !== 'bypassPermissions') {
+        return { action: 'ask', risk: 'destructive', reason: `检测到不可逆操作：${dest}` }
+      }
+      const net = findNetworkUse(cmdText)
+      if (net && ctx.mode !== 'bypassPermissions' && ctx.mode !== 'acceptEdits') {
+        return { action: 'ask', risk, reason: net }
+      }
     }
   }
   if (tool === 'git_operation' && typeof args.operation === 'string') {
@@ -270,3 +293,39 @@ export const PERMISSION_MODES: PermissionMode[] = [
 export function isPermissionMode(v: unknown): v is PermissionMode {
   return typeof v === 'string' && (PERMISSION_MODES as string[]).includes(v)
 }
+
+// ===================== 会话级「记住的规则」=====================
+
+/**
+ * 用户在审批卡片上勾选「以后同类操作都放行」时，把规则记到这里。
+ *
+ * 为什么单独存、而不并进 opts.permissionRules：
+ * 后者在 Agent 循环启动时就固定了，而「记住」发生在循环**进行中** ——
+ * 必须用一个可变的会话级存储，loop 每次判定时动态合并进去。
+ *
+ * ⚠️ 安全性质：这些 allow 规则走的是 evaluatePermission 的**第 4 步**，
+ * 而破坏性命令拦截在**第 3 步**、敏感文件在第 1 步。所以「记住 run_command 的放行」
+ * **不会**让 `rm -rf /` 静默执行 —— 它照样会被要求确认。
+ * 「同类操作确认一次就够」针对的是常规写操作，不是关掉所有闸门。
+ */
+const sessionRules = new Map<string, PermissionRule[]>()
+
+export function getSessionRules(sessionId: string): PermissionRule[] {
+  return sessionRules.get(sessionId) ?? []
+}
+
+export function addSessionRule(sessionId: string, rule: PermissionRule): void {
+  const list = sessionRules.get(sessionId) ?? []
+  // 去重：同工具+同 action+同 pattern 不重复添加
+  const dup = list.some(
+    (r) => r.tool === rule.tool && r.action === rule.action && r.pattern === rule.pattern,
+  )
+  if (!dup) list.push(rule)
+  sessionRules.set(sessionId, list)
+}
+
+export function clearSessionRules(sessionId?: string): void {
+  if (sessionId) sessionRules.delete(sessionId)
+  else sessionRules.clear()
+}
+

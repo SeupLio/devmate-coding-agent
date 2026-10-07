@@ -49,7 +49,10 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 🌍 **真实任务基准** | **SWE-bench 式**：从真实开源仓库的**真实修复提交**自动构建任务，FAIL_TO_PASS / PASS_TO_PASS 由机器推导验证（见 [docs/BENCHMARK.md](docs/BENCHMARK.md)） |
 | 🔬 **评测自检** | 变异测试攻击评测器本身：**11 个变异体**检出率 100%；发现并修复「删测试即可通过」「伪造期望值自洽」两类作弊盲区 |
 | 🩺 **失败诊断** | 失败模式分类：把「没通过」归类为 8 种可枚举模式（未改动 / 未验证 / 超步数 / 作弊 / API 异常 …），附证据与改进建议 |
-| 🧪 **工程质量** | **136 个**单元测试覆盖沙箱安全 / 工具执行 / 检索 / 编辑 / 上下文压缩 / 防作弊 / 失败分类 / 评测灵敏度 |
+| 🧪 **工程质量** | **157 个**单元测试覆盖沙箱安全 / 工具执行 / 检索 / 编辑 / 上下文压缩 / 防作弊 / 失败分类 / 评测灵敏度 / 权限记忆 / 对话导航 |
+| 📌 **粘底滚动** | 流式输出自动跟随最新消息，用户往上翻阅时**不打断**；解除跟随后显示「回到底部」按钮（原来每个 token 都触发平滑滚动，动画互相打架导致"看不到新消息"） |
+| 🔁 **审批记忆** | 审批卡片可勾选「以后同类操作不再询问」→ 记进**会话级 allow 规则**。⚠️ 破坏性命令（`rm -rf`）与敏感文件仍在更前置的步骤被拦截，「记住」不会关掉这些闸门 |
+| 🧭 **对话节点导航** | 把每轮「提问 / 回复」标成可跳转节点，点击滚动到对应位置，带 scrollspy 高亮当前节点 —— 长对话里不用一路往上翻 |
 | 🔁 **限流韧性** | LLM 层指数退避重试（429/5xx），长评测链路不中断 |
 
 > ⚠️ **生产落地评估见 [docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)** ——
@@ -667,14 +670,6 @@ src/
     ablation.ts               # 对照实验（7 组 + 裸模型执行器）
     sensitivity.ts            # 评测灵敏度检查（变异测试，11 变异体，不需要 LLM）
     failure-modes.ts          # 失败模式分类（信号 → 8 种模式 + 证据 + 建议）
-  lib/bench/                   # 真实任务基准（对外效度）
-    types.ts                  # 任务模型（含 provenance）+ 五维结果模型
-    github.ts                 # 真实任务源（api.github.com + codeload tarball）
-    builder.ts                # SWE-bench 式任务构建器（两阶段验证 FAIL_TO_PASS）
-    registry.ts               # 真实任务种子（真实仓库 + 真实修复提交）
-    runner.ts                 # 跑 Agent + 覆盖隐藏测试 + 多维打分
-    report.ts                 # 按难度/类别/出处分组 + 污染风险
-    judge.ts                  # LLM Judge（开放式任务，四道约束防「随便给分」）
   lib/bench/                   # 真实任务基准（对标 SWE-bench 方法论）
     types.ts                  # 任务/结果模型（provenance、隐藏测试、五维评分）
     github.ts                 # 从 api.github.com / codeload 拉 issue / 提交 / 仓库快照
@@ -683,8 +678,15 @@ src/
     runner.ts                 # 跑 Agent + 隐藏测试判定 + 多维打分
     report.ts                 # 按难度/类别/出处分组 + 污染风险 + 失败模式
     judge.ts                  # 开放式任务的 LLM Judge（rubric + 强制引用原文）
-  components/agent/            # ToolCallCard / WorkspacePanel / EvalPanel
-tests/agent.test.ts            # 67 个单元测试
+    bfcl.ts                   # ★ BFCL v4 适配 + 判分器（Berkeley 函数调用权威基准）
+    polyglot.ts               # ★ Aider polyglot-benchmark（Exercism JS）适配
+  lib/host/
+    bridge.ts                 # ★ 跨端 WebView 宿主适配（浏览器/Electron/UE/Maya）
+  lib/hooks/
+    use-stick-to-bottom.ts    # ★ 粘底滚动（流式跟随 + 用户上翻不打断）
+  components/agent/            # ToolCallCard / WorkspacePanel / EvalPanel / ReviewPanel
+                               # / HostBadge / ConversationNav（对话节点导航）
+tests/agent.test.ts            # 157 个单元测试
 scripts/run-agent.ts           # CLI 单任务入口
 scripts/run-eval.ts            # CLI 评测入口（--only default|holdout|hard, --repeat N）
 scripts/run-hard.ts            # CLI 难任务集评测（含失败模式报告）
@@ -698,6 +700,10 @@ scripts/mcp-smoke.ts           # MCP 端到端冒烟：验证 Agent 运行时发
 scripts/p0-smoke.ts            # P0 端到端冒烟：权限闸门 + HITL 审批 + 可观测性
 scripts/trace-report.ts        # 可观测性报告（延迟分位 / 成本 / 瓶颈 / 工具失败率）
 scripts/demo.ts                # 一键本地 Demo（不需要浏览器）
+scripts/review.ts              # 代码评审 CLI（支持 --diff 离线评审一个 patch 文件）
+scripts/bfcl-run.ts            # ★ BFCL v4 评测（native / mcp 两种通道）
+scripts/polyglot-run.ts        # ★ Aider polyglot-benchmark（JS）评测
+scripts/mcp-bfcl-server.ts     # 通用 MCP 服务器：把 BFCL 工具集经 MCP 通道暴露
 docs/ci.yml                    # CI 门禁定义（见文件头：启用需 token 具备 workflow scope）
 docs/EVALUATION.md             # 评测方法论（五层体系）
 docs/BENCHMARK.md              # 真实任务基准设计（五条原则如何落地 + 已知局限）
@@ -707,8 +713,8 @@ docs/OBSERVABILITY-AND-PERMISSIONS.md  # P0：可观测性与权限模型的设�
 docs/JD-ALIGNMENT.md           # 与米哈游 AI 产品全栈开发 JD 的逐条对照与诚实缺口
 docs/HANDOVER.md               # ★ 交接文档：从零构建全过程 + 复现 + 运行 + 提交 GitHub
 docs/EXTERNAL-BENCHMARKS.md    # ★ 外部权威基准（BFCL / polyglot）的实测与诚实边界
-docs/ci.yml                    # CI 定义（启用需 token 具备 workflow scope，见文件头）
 benchmarks/                    # 真实任务清单 + 构建报告 + 基准报告
+benchmarks/external/           # ★ 外部基准数据（bfcl / polyglot，第三方数据已 gitignore）
 assets/template-project/       # 主沙箱模板（mathutils + DEVmate.md）
 assets/holdout-project/        # held-out 沙箱模板（stringutils，预置失败测试）
 assets/hard-project/           # 难任务模板（多文件计算器 + 参考实现 oracle + DEVmate.md）
@@ -737,6 +743,12 @@ assets/hard-reference/         # 难项目参考解（灵敏度实验基线）
 - [x] **可观测性**：trace / span / 成本账本 / 缓存命中率 / 工具失败率（`trace.ts` / `trace-store.ts`）
 - [x] **摘要式上下文压缩**：LLM 提炼替代占位符截断，失败自动降级
 - [x] **CI 门禁**：typecheck + 单测 + 生产构建（`.github/workflows/ci.yml`）
+- [x] **代码评审**：`review_diff` 工具 + 评审面板（确定性静态检查 + LLM 语义评审两层）
+- [x] **知识库检索 RAG**：`search_knowledge` 工具 + `/api/knowledge`（离线 TF-IDF）
+- [x] **VCS 抽象层**：Git 完整 + Perforce 命令映射（`VCS_PROVIDER` 切换；P4 未实机验证）
+- [x] **跨端 WebView 适配**：宿主探测（浏览器/Electron/UE/Maya）+ 统一桥 + 显式降级
+- [x] **外部权威基准**：BFCL v4（函数调用）+ Aider polyglot（Exercism JS），题目/答案由外部定义
+- [x] **交互体验**：粘底滚动 + 审批记忆（同类操作确认一次）+ 对话节点导航
 - [ ] **真容器沙箱**：把「进程内 + 命令白名单」换成容器隔离（P0，见生产评估文档）
 - [ ] **Hooks**：工具调用前后的自定义钩子
 - [ ] **prompt cache 友好的上下文布局**（实测命中率已有 90%，继续优化空间明确）
