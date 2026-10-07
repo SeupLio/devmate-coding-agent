@@ -27,7 +27,8 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "bfcl": "bun scripts/bfcl-run.ts",
-    "polyglot": "bun scripts/polyglot-run.ts"
+    "polyglot": "bun scripts/polyglot-run.ts",
+    "ecom": "bun scripts/ecom-pipeline.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

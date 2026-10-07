@@ -2036,3 +2036,225 @@ describe('电商话术质检（script）', () => {
     expect(BUILTIN_VARIANTS.find((v) => v.id === 'v3_roleplay')?.system).toContain('差的话术长这样')
   })
 })
+
+// ===================== 电商场景：数据清洗 =====================
+
+describe('电商数据清洗（cleaning）', () => {
+  test('**回归**：带 % 的数值必须能解析（曾因没删掉 % 导致所有比率字段解析失败）', async () => {
+    const { parseNumber, parseRate } = await import('@/lib/ecom/cleaning')
+    // 这个 bug 让完整度直接从 86% 掉到 0%，是最典型的「脏数据静默变空」
+    expect(parseNumber('6%')).toBeCloseTo(0.06, 6)
+    expect(parseNumber('1.2%')).toBeCloseTo(0.012, 6)
+    expect(parseRate('6%')).toBeCloseTo(0.06, 6)
+    expect(parseRate('1.2%')).toBeCloseTo(0.012, 6)
+    // 全角 ％ 也要能处理
+    expect(parseRate('1.8％')).toBeCloseTo(0.018, 6)
+    // 数字形态：>1 视为百分数写法
+    expect(parseRate(1.2)).toBeCloseTo(0.012, 6)
+    expect(parseRate(0.012)).toBeCloseTo(0.012, 6)
+  })
+
+  test('千分位 / 货币符号 / 中文数量单位都能解析', async () => {
+    const { parseNumber } = await import('@/lib/ecom/cleaning')
+    expect(parseNumber('¥1,234,567')).toBe(1234567)
+    expect(parseNumber('123.4万')).toBe(1234000)
+    expect(parseNumber('1.2亿')).toBe(120000000)
+    expect(parseNumber('１２３')).toBe(123) // 全角数字
+    expect(parseNumber('abc')).toBeNull() // 无法解析 → null，不猜
+  })
+
+  test('空值的各种写法都能识别（空串 / - / N/A / 暂无）', async () => {
+    const { isNullish } = await import('@/lib/ecom/cleaning')
+    for (const v of ['', '  ', '-', 'N/A', 'null', '暂无', '无', '未知', null, undefined]) {
+      expect(isNullish(v)).toBe(true)
+    }
+    expect(isNullish('0')).toBe(false)
+    expect(isNullish(0)).toBe(false)
+  })
+
+  test('中英文表头都能映射到标准字段（真实导出表列名千奇百怪）', async () => {
+    const { mapColumns } = await import('@/lib/ecom/cleaning')
+    const m = mapColumns({ 商家ID: 'M1', 退款率: '6%', 转化率: '1.2%', 月GMV: '8万', 跟进记录: 'x' })
+    expect(m.id).toBe('M1')
+    expect(m.refundRate).toBe('6%')
+    expect(m.conversionRate).toBe('1.2%')
+    expect(m.monthlyGmv).toBe('8万')
+    expect(m.note).toBe('x')
+  })
+
+  test('异常值不静默采用：置空并记入报告（错误数据比没数据更糟）', async () => {
+    const { cleanRecords } = await import('@/lib/ecom/cleaning')
+    const r = cleanRecords([
+      { 商家ID: 'A', 月GMV: '-5000', 退款率: '150%', 转化率: '2%' },
+    ])
+    expect(r.report.outliers.length).toBe(2)
+    const rec = r.records[0]
+    expect(rec.monthlyGmv).toBeUndefined() // 负数 → 置空
+    expect(rec.refundRate).toBeUndefined() // >100% → 置空
+    expect(rec.conversionRate).toBeCloseTo(0.02, 6) // 正常值保留
+  })
+
+  test('去重保留字段更完整的一条', async () => {
+    const { cleanRecords } = await import('@/lib/ecom/cleaning')
+    const r = cleanRecords([
+      { 商家ID: 'A1', 商家名称: '某店', 转化率: '2%' },
+      { 商家ID: 'A2', 商家名称: '某店', 转化率: '2%', 退款率: '5%', 进店量: '3000' },
+    ])
+    expect(r.records.length).toBe(1)
+    expect(r.report.duplicates.length).toBe(1)
+    // 保留了字段更多的那条
+    expect(r.records[0].refundRate).toBeCloseTo(0.05, 6)
+  })
+
+  test('清洗动作留痕（运营能复核「你改了我什么」）', async () => {
+    const { cleanRecords } = await import('@/lib/ecom/cleaning')
+    const r = cleanRecords([{ 商家ID: 'A', 月GMV: '¥220,000' }])
+    expect(r.fixes.length).toBeGreaterThan(0)
+    const f = r.fixes[0]
+    expect(f.merchantId).toBe('A')
+    expect(f.field).toBe('monthlyGmv')
+    expect(f.from).toBe('¥220,000')
+    expect(f.reason.length).toBeGreaterThan(0)
+  })
+})
+
+// ===================== 电商场景：CSV 与全链路 =====================
+
+describe('CSV 导入导出 + 全链路 pipeline', () => {
+  test('CSV 解析处理引号/逗号/换行/转义引号', async () => {
+    const { parseCsv } = await import('@/lib/ecom/pipeline')
+    const csv = 'id,name,note\nA,"公司, 分公司","第一行\n第二行"\nB,普通,"含""引号"""\n'
+    const rows = parseCsv(csv)
+    expect(rows.length).toBe(2)
+    expect(rows[0].name).toBe('公司, 分公司')
+    expect(rows[0].note).toContain('\n') // 字段内换行不被当行分隔
+    expect(rows[1].note).toBe('含"引号"') // "" 转义成一个 "
+  })
+
+  test('BOM 头被去掉（否则 Excel 存的第一列列名匹配不上）', async () => {
+    const { parseCsv } = await import('@/lib/ecom/pipeline')
+    const rows = parseCsv('\ufeff商家ID,转化率\nA,2%\n')
+    expect(Object.keys(rows[0])[0]).toBe('商家ID')
+  })
+
+  test('**结构性问题必须检出**：列数不匹配会静默错位，比解析失败更危险', async () => {
+    const { parseCsvWithIssues } = await import('@/lib/ecom/pipeline')
+    // 未加引号的 ¥99,000 会被拆成两列
+    const csv = 'id,name,gmv\nA,正常,100\nB,坏行,¥99,000\n'
+    const { rows, issues } = parseCsvWithIssues(csv)
+    expect(rows.length).toBe(2)
+    expect(issues.length).toBe(1)
+    expect(issues[0].line).toBe(3)
+    expect(issues[0].expected).toBe(3)
+    expect(issues[0].actual).toBe(4)
+  })
+
+  test('CSV 导出：含逗号/引号/换行的字段正确转义，且带 BOM', async () => {
+    const { escapeCsv, toCsv } = await import('@/lib/ecom/pipeline')
+    expect(escapeCsv('普通')).toBe('普通')
+    expect(escapeCsv('含,逗号')).toBe('"含,逗号"')
+    expect(escapeCsv('含"引号')).toBe('"含""引号"')
+    const out = toCsv(['a', 'b'], [['含,逗号', '普通']])
+    expect(out.charCodeAt(0)).toBe(0xfeff) // BOM
+    expect(out).toContain('"含,逗号"')
+  })
+
+  test('全链路：脏 CSV → 清洗 → 打标 → 诊断，端到端可跑', async () => {
+    const { runPipelineFromCsv } = await import('@/lib/ecom/pipeline')
+    const csv =
+      '商家ID,商家名称,月GMV,转化率,退款率,响应时长,进店量,跟进记录,阶段\n' +
+      'M1,女装店,"¥220,000",1.2%,15%,95,4200,转化率低退款多,有意向\n' +
+      'M2,零食店,8万,1.8％,6%,40,2600,想做直播,已联系\n'
+    const r = runPipelineFromCsv(csv)
+    expect(r.summary.inputRows).toBe(2)
+    expect(r.summary.validRows).toBe(2)
+    expect(r.structuralIssues.length).toBe(0)
+    // 数值清洗正确（含中文单位与百分号）
+    expect(r.enriched[0].record.monthlyGmv).toBe(220000)
+    expect(r.enriched[0].record.conversionRate).toBeCloseTo(0.012, 6)
+    // 打标 + 诊断都产出了
+    expect(r.enriched[0].tags.length).toBeGreaterThan(0)
+    expect(r.enriched[0].diagnosis.headline.length).toBeGreaterThan(0)
+    // 优先级分布有统计
+    expect(Object.values(r.summary.priorityCount).reduce((a, b) => a + b, 0)).toBe(2)
+  })
+
+  test('导出表含关键列（运营可直接用）', async () => {
+    const { runPipelineFromCsv, exportEnriched } = await import('@/lib/ecom/pipeline')
+    const r = runPipelineFromCsv('商家ID,商家名称,转化率,退款率,响应时长,进店量\nA,某店,1.2%,15%,95,4200\n')
+    const out = exportEnriched(r.enriched)
+    for (const col of ['跟进优先级', '健康分', '诊断结论', '推荐任务1', '需复核标签数']) {
+      expect(out).toContain(col)
+    }
+  })
+})
+
+// ===================== 电商场景：打标纠错回流 =====================
+
+describe('打标纠错回流（tag-store）', () => {
+  test('纠错类型分类：误标 / 漏标 / 改值', async () => {
+    const { classifyCorrection } = await import('@/lib/ecom/tag-store')
+    expect(classifyCorrection({ merchantId: 'M', dimension: 'scale', original: 'ka', corrected: '', at: 0 })).toBe('false_positive')
+    expect(classifyCorrection({ merchantId: 'M', dimension: 'category', original: '', corrected: 'apparel', at: 0 })).toBe('false_negative')
+    expect(classifyCorrection({ merchantId: 'M', dimension: 'health', original: 'healthy', corrected: 'at_risk', at: 0 })).toBe('value_change')
+  })
+
+  test('归因：统计各维度纠错分布，并给出**具体的迭代建议**', async () => {
+    const { recordCorrection, analyzeCorrections, clearCorrections } = await import('@/lib/ecom/tag-store')
+    clearCorrections()
+    try {
+      // 类目主要是漏标 → 建议补关键词/走 LLM 兜底
+      recordCorrection({ merchantId: 'M1', dimension: 'category', original: '', corrected: 'apparel' })
+      recordCorrection({ merchantId: 'M2', dimension: 'category', original: '', corrected: 'beauty' })
+      // 规模主要是误标 → 建议收紧阈值
+      recordCorrection({ merchantId: 'M3', dimension: 'scale', original: 'ka', corrected: '' })
+
+      const r = analyzeCorrections()
+      expect(r.total).toBe(3)
+      const cat = r.byDimension.find((d) => d.dimension === 'category')!
+      expect(cat.dominantKind).toBe('false_negative')
+      expect(cat.advice).toContain('漏标')
+      const scale = r.byDimension.find((d) => d.dimension === 'scale')!
+      expect(scale.dominantKind).toBe('false_positive')
+      expect(scale.advice).toContain('误标')
+      expect(r.topPriority.length).toBeGreaterThan(0)
+    } finally {
+      clearCorrections()
+    }
+  })
+
+  test('**口径诚实性**：报告必须声明这是纠错样本估计、偏高，不是全量准确率', async () => {
+    const { recordCorrection, analyzeCorrections, clearCorrections } = await import('@/lib/ecom/tag-store')
+    clearCorrections()
+    try {
+      recordCorrection({ merchantId: 'M1', dimension: 'category', original: '', corrected: 'apparel' })
+      const r = analyzeCorrections()
+      expect(r.caveat).toContain('偏高')
+      expect(r.caveat).toContain('不是全量准确率')
+    } finally {
+      clearCorrections()
+    }
+  })
+
+  test('纠错可应用到标签上：误标删除、漏标补上（置信度给 1）', async () => {
+    const { recordCorrection, applyCorrections, clearCorrections } = await import('@/lib/ecom/tag-store')
+    clearCorrections()
+    try {
+      recordCorrection({ merchantId: 'M1', dimension: 'scale', original: 'ka', corrected: '' })
+      recordCorrection({ merchantId: 'M1', dimension: 'category', original: '', corrected: 'apparel', reason: '商家自述' })
+      const tags = [
+        { dimension: 'scale', value: 'ka', label: 'KA', confidence: 1, evidence: '', needReview: false },
+        { dimension: 'health', value: 'healthy', label: '健康', confidence: 0.9, evidence: '', needReview: false },
+      ]
+      const out = applyCorrections(tags, 'M1')
+      expect(out.find((t) => t.dimension === 'scale')).toBeUndefined() // 误标被删
+      const cat = out.find((t) => t.dimension === 'category')!
+      expect(cat.value).toBe('apparel') // 漏标被补
+      expect(cat.confidence).toBe(1)
+      expect(cat.evidence).toContain('人工补充')
+      expect(out.find((t) => t.dimension === 'health')).toBeDefined() // 无关标签不动
+    } finally {
+      clearCorrections()
+    }
+  })
+})

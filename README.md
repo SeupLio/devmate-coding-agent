@@ -53,7 +53,7 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 📌 **粘底滚动** | 流式输出自动跟随最新消息，用户往上翻阅时**不打断**；解除跟随后显示「回到底部」按钮（原来每个 token 都触发平滑滚动，动画互相打架导致"看不到新消息"） |
 | 🔁 **审批记忆** | 审批卡片可勾选「以后同类操作不再询问」→ 记进**会话级 allow 规则**。⚠️ 破坏性命令（`rm -rf`）与敏感文件仍在更前置的步骤被拦截，「记住」不会关掉这些闸门 |
 | 🧭 **对话节点导航** | 把每轮「提问 / 回复」标成可跳转节点，点击滚动到对应位置，带 scrollspy 高亮当前节点 —— 长对话里不用一路往上翻 |
-| 🛒 **电商服务商场景** | 把 Agent 能力迁移到电商业务：**7 维标签体系 + 可解释打标**（带置信度与复核标记）、**经营诊断 + 任务推荐**（按「影响÷难度」排序）、**业务知识库 RAG**（平台规则/SOP/方法论/案例）、**话术生成 + SOP 硬红线质检**、**Prompt 变体效果对比**。前端有可交互的「服务商工作台」面板 |
+| 🛒 **电商服务商场景** | 把 Agent 能力迁移到电商业务，形成**从原始数据到可执行清单**的闭环：**数据清洗**（多种写法归一 / 异常值拦截 / 去重留痕 / CSV 结构性问题检出）→ **7 维标签打标**（带判定口径、置信度、复核标记）→ **经营诊断 + 任务推荐**（按「影响÷难度」排序）→ **话术生成 + SOP 硬红线质检** → **纠错回流**（归因到规则迭代）。含业务知识库 RAG、Prompt 变体对比、可交互「服务商工作台」面板与批量 CLI |
 | 🔁 **限流韧性** | LLM 层指数退避重试（429/5xx），长评测链路不中断 |
 
 > ⚠️ **生产落地评估见 [docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)** ——
@@ -682,10 +682,13 @@ src/
     bfcl.ts                   # ★ BFCL v4 适配 + 判分器（Berkeley 函数调用权威基准）
     polyglot.ts               # ★ Aider polyglot-benchmark（Exercism JS）适配
   lib/ecom/                     # ★ 电商服务商垂直场景
+    cleaning.ts               # 数据清洗（多种写法归一 / 异常值拦截 / 去重留痕）
+    pipeline.ts               # CSV 导入导出 + 全链路（清洗→打标→诊断）
     taxonomy.ts               # 7 维标签体系（含判定口径）
     tagging.ts                # 打标引擎（规则优先 + 置信度 + 可解释）
     diagnosis.ts              # 经营诊断 + 任务推荐（按影响/难度排序）
     script.ts                 # 话术生成 + 质检 + Prompt 变体对比
+    tag-store.ts              # 打标纠错回流（归因 → 规则迭代依据）
     demo-data.ts              # 演示数据（合成，字段结构可对接数仓）
   lib/host/
     bridge.ts                 # ★ 跨端 WebView 宿主适配（浏览器/Electron/UE/Maya）
@@ -710,6 +713,7 @@ scripts/demo.ts                # 一键本地 Demo（不需要浏览器）
 scripts/review.ts              # 代码评审 CLI（支持 --diff 离线评审一个 patch 文件）
 scripts/bfcl-run.ts            # ★ BFCL v4 评测（native / mcp 两种通道）
 scripts/polyglot-run.ts        # ★ Aider polyglot-benchmark（JS）评测
+scripts/ecom-pipeline.ts       # ★ 电商批量处理 CLI（CSV 清洗→打标→诊断→导出）
 scripts/mcp-bfcl-server.ts     # 通用 MCP 服务器：把 BFCL 工具集经 MCP 通道暴露
 docs/ci.yml                    # CI 门禁定义（见文件头：启用需 token 具备 workflow scope）
 docs/EVALUATION.md             # 评测方法论（五层体系）
