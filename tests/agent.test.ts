@@ -1817,6 +1817,29 @@ describe('对话节点导航（ConversationNav）', () => {
   })
 })
 
+// ===================== LLM 重试策略：终态错误必须快速失败 =====================
+
+describe('LLM 终态错误判定（isTerminal）', () => {
+  test('**回归**：配额耗尽 / 鉴权失败是终态错误，重试没有意义', async () => {
+    // 曾经的 bug：isRetryable 对任何 429 都重试 → 配额耗尽时白等几分钟才失败。
+    // 实测「Prompt 变体对比」在配额耗尽下 120s 都跑不完（每次调用都退避重试到上限）。
+    const { isTerminal } = await import('@/lib/agent/llm.openai')
+    // 终态：重试不可能成功
+    expect(isTerminal(new Error('HTTP 429: {"error":{"type":"quota_error","code":"apikey_quota_exhausted"}}'))).toBe(true)
+    expect(isTerminal(new Error('HTTP 429: {"error":{"code":"insufficient_quota"}}'))).toBe(true)
+    expect(isTerminal(new Error('HTTP 401: invalid_api_key'))).toBe(true)
+    expect(isTerminal(new Error('ApiKey已触发限额'))).toBe(true)
+    expect(isTerminal(new Error('账户余额不足'))).toBe(true)
+  })
+
+  test('限流 / 网关抖动**不是**终态错误（等一会儿能好，应该重试）', async () => {
+    const { isTerminal } = await import('@/lib/agent/llm.openai')
+    expect(isTerminal(new Error('HTTP 429: Too many requests, please retry later'))).toBe(false)
+    expect(isTerminal(new Error('HTTP 503 Service Unavailable'))).toBe(false)
+    expect(isTerminal(new Error('fetch failed'))).toBe(false)
+  })
+})
+
 // ===================== 电商垂直场景：标签体系 =====================
 
 describe('电商标签体系（taxonomy）', () => {

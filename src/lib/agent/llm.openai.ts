@@ -67,8 +67,31 @@ function backoffDelay(attempt: number): number {
   return Math.min(2 ** attempt, 40) * 1000 + Math.random() * 1000
 }
 
+/**
+ * 终态错误：重试**不可能**成功，必须立即失败。
+ *
+ * ⚠️ 这是修过的一个真 bug：原来 `isRetryable` 对**任何 429** 都重试，
+ * 但「配额耗尽」和「限流」是两回事 ——
+ *  - 限流（rate limit）：等一会儿就好 → 该重试
+ *  - 配额耗尽（quota exhausted）：等多久都没用 → **重试纯属浪费时间**
+ *
+ * 后果实测：配额耗尽时跑「Prompt 变体对比」（3 变体 × N 商家），
+ * 每次调用都退避重试到上限，整个请求 120s 超时都跑不完。
+ * 对使用者来说就是「卡住不动」，体验极差。
+ */
+export function isTerminal(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return (
+    /quota_error|apikey_quota_exhausted|insufficient_quota|exceeded your current quota/i.test(msg) ||
+    /invalid_api_key|invalid api key|authentication_error|incorrect api key/i.test(msg) ||
+    /余额不足|欠费|账户异常|已触发限额/.test(msg)
+  )
+}
+
 function isRetryable(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e)
+  // 终态错误优先判定：配额/鉴权问题重试没有意义，直接失败让上层快速感知
+  if (isTerminal(e)) return false
   // HTTP 限流/网关抖动
   if (/429|Too many requests|502|503|504/.test(msg)) return true
   // 网络层中断：连接被对端关闭、DNS/TLS 抖动、undici 的 "fetch failed"

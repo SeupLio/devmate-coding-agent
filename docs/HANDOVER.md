@@ -16,7 +16,7 @@
 | 是什么 | **DevMate** —— 浏览器端 Coding Agent（对标 Claude Code 的产品形态） |
 | 技术栈 | Next.js 16（App Router）+ React + TypeScript + Prisma/SQLite + Bun |
 | 代码量 | `src/lib/agent` ≈ 3500 行、`src/lib/bench` ≈ 1100 行、`src/lib/eval` ≈ 1400 行、前端 ≈ 6000 行 |
-| 测试 | `bun test tests/agent.test.ts` → **192 通过 / 0 失败** |
+| 测试 | `bun test tests/agent.test.ts` → **194 通过 / 0 失败**；`bun run e2e` → **44/44** |
 | 一句话卖点 | 用**真实仓库的真实修复提交**自动生成可验证任务，并以此证明并定位 Agent 的失败模式 |
 | 最大缺口 | 没有真实用户使用过；P4 层未在真实环境验证；沙箱不是容器 |
 
@@ -258,7 +258,18 @@ cd E:/hc/devmate-coding-agent
 
 ---
 
-## 5. 本地运行（三种方式）
+## 5. 本地运行
+
+> ★ **想快速确认「能跑」？** 直接 `bun run e2e` —— 44 项断言，不依赖 LLM 与网络，
+> 任何机器上都应该全绿。完整复现步骤见 **[docs/E2E-REPRODUCE.md](E2E-REPRODUCE.md)**。
+
+### 方式 0：端到端自检（推荐先跑）
+
+```bash
+"$BUN" run e2e      # 44 项断言：清洗/CSV/打标/诊断/全链路/知识库/纠错回流
+"$BUN" run ecom     # 电商全链路：脏数据 → 清洗 → 打标 → 诊断 → 导出
+```
+
 
 ### 方式 A：一键 Demo（最快，不需要浏览器）★ 推荐先跑这个
 

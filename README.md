@@ -268,6 +268,12 @@ bun run dev         # http://localhost:3000
 bun run demo
 ```
 
+**想先确认「真的能跑」？** 一条命令，不依赖任何外部服务：
+
+```bash
+bun run e2e    # 端到端自检：44 项断言（清洗/打标/诊断/CSV/知识库/纠错回流）
+```
+
 它会真实跑一遍「修 bug → 跑测试 → 提交」，并依次展示：
 
 ```
@@ -714,6 +720,7 @@ scripts/review.ts              # 代码评审 CLI（支持 --diff 离线评审�
 scripts/bfcl-run.ts            # ★ BFCL v4 评测（native / mcp 两种通道）
 scripts/polyglot-run.ts        # ★ Aider polyglot-benchmark（JS）评测
 scripts/ecom-pipeline.ts       # ★ 电商批量处理 CLI（CSV 清洗→打标→诊断→导出）
+scripts/e2e-check.ts           # ★ 端到端全流程自检（44 项断言，不依赖 LLM）
 scripts/mcp-bfcl-server.ts     # 通用 MCP 服务器：把 BFCL 工具集经 MCP 通道暴露
 docs/ci.yml                    # CI 门禁定义（见文件头：启用需 token 具备 workflow scope）
 docs/EVALUATION.md             # 评测方法论（五层体系）
@@ -726,6 +733,7 @@ docs/HANDOVER.md               # ★ 交接文档：从零构建全过程 + 复�
 docs/EXTERNAL-BENCHMARKS.md    # ★ 外部权威基准（BFCL / polyglot）的实测与诚实边界
 docs/ECOM-JD-ALIGNMENT.md      # ★ 与「AI 产品实习生-电商」JD 的逐条对照与诚实缺口
 docs/ECOM-PRD.md               # ★ 电商 AI 能力 PRD（场景优先级 / 指标口径 / 三阶段规划）
+docs/E2E-REPRODUCE.md          # ★ 如何复现：从零到跑通的完整步骤
 benchmarks/                    # 真实任务清单 + 构建报告 + 基准报告
 benchmarks/external/           # ★ 外部基准数据（bfcl / polyglot，第三方数据已 gitignore）
 assets/template-project/       # 主沙箱模板（mathutils + DEVmate.md）
