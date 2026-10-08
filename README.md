@@ -743,6 +743,7 @@ docs/ECOM-PRD.md               # ★ 电商 AI 能力 PRD（场景优先级 / �
 docs/ECOM-VALUE.md             # ★ 真实场景价值与评价指标（谁在用 / 替代了什么 / 诚实边界）
 docs/ECOM-EVALUATION.md        # ★ 评测方法论（回归集 vs 挑战集 / 评测驱动的两轮真实改进）
 docs/E2E-REPRODUCE.md          # ★ 如何复现：从零到跑通的完整步骤
+docs/RESUME.md                 # ★ 简历表述（Agent 主体 + 电商扩展；成果只用外部基准）
 benchmarks/                    # 真实任务清单 + 构建报告 + 基准报告
 benchmarks/external/           # ★ 外部基准数据（bfcl / polyglot，第三方数据已 gitignore）
 assets/template-project/       # 主沙箱模板（mathutils + DEVmate.md）
