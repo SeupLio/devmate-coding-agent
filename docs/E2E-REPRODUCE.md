@@ -28,13 +28,16 @@ bun test tests/agent.test.ts   # 单元测试：194 条
 
 ```bash
 BUN="C:/Users/10718/.workbuddy-ai/binaries/bun/bun.exe"
-NODE="C:/Users/10718/.workbuddy-ai/binaries/node/versions/22.22.2-3/node.exe"
+NODE="C:/Users/10718/.workbuddy-ai/binaries/node/versions/22.22.2-6/node.exe"
 PY="C:/Python313/python.exe"
 ```
 
 > ⚠️ **Python 路径踩过坑**：`C:/Users/10718/.workbuddy-ai/binaries/python/versions/3.13.12/`
 > 曾经可用，现在该目录**是空的**。请用系统 Python `C:/Python313/python.exe`。
 > 用错路径的症状是 `No such file or directory` 且**整个脚本没执行**（不是部分执行）。
+>
+> ⚠️ **Node 路径会漂移**：managed node 的版本目录名变过（`22.22.2-3` → `22.22.2-6`）。
+> 报 `No such file or directory` 时先 `ls .../node/versions/` 确认真实目录名。
 
 ### 1.2 依赖与数据库
 
@@ -124,6 +127,13 @@ OPENAI_MODEL=qwen3.8-max
 > curl --noproxy '*' -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/   # 应为 200
 > ```
 
+> ⚠️ **本机 `bun run dev` 会静默退出**（进程 400ms 内结束、无任何输出）。
+> 绕过办法是直接用 node 起 `next dev`（实测正常）：
+> ```bash
+> "$NODE" node_modules/next/dist/bin/next dev -p 3000
+> ```
+> 另外 dev 与 build 共用 `.next`：**起 dev 前要先清掉生产 `.next`**，否则报 `EPERM`。
+
 ---
 
 ## 5. 单元测试与质量门禁
@@ -160,18 +170,35 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0 bun run build
 
 ## 6. 依赖 LLM 的功能（需要可用额度）
 
-> 本机当前 **LLM 配额已耗尽**（`HTTP 429: ApiKey已触发限额`），以下功能无法端到端验证。
-> 代码本身已验证（确定性部分有单测覆盖），**但缺少真实的端到端数据** —— 这一点不掩饰。
+> ✅ **2026-10-08 已全部跑通**（配额恢复后补跑）。实测结果见下表。
+> 复现前先用 §6.2 的命令确认额度可用。
 
-| 功能 | 命令 |
-|---|---|
-| 一键 Demo（修 bug → 跑测试 → 提交） | `"$BUN" run demo` |
-| P0 冒烟（权限 + 审批 + 可观测性） | `"$BUN" run p0:smoke` |
-| MCP 冒烟 | `"$BUN" run mcp:smoke` |
-| 话术生成 / Prompt 变体对比 | 界面「电商」标签，或 `POST /api/ecom {action:'script'\|'compare'}` |
-| 代码评审（LLM 语义层） | `"$BUN" run review <sessionId>` |
+| 功能 | 命令 | 实测结果 |
+|---|---|---|
+| 一键 Demo（修 bug → 跑测试 → 提交） | `"$BUN" run demo` | 14 步 / 14 次工具调用 / 9 次审批询问；修好 3 个 bug（平均值分母、fibonacci、maxOf 导出），**4 项测试全通过并自动提交**；43.9s / 95463 tokens |
+| P0 冒烟（权限 + 审批 + 可观测性） | `"$BUN" run p0:smoke` | **10/10 通过**；plan 模式正确拒绝写操作、default 模式触发审批、trace 落盘 4 条、延迟分位可算 |
+| MCP 冒烟（外部工具发现与调用） | `"$BUN" run mcp:smoke` | 运行时发现 3 个 MCP 工具；调用 `mcp__demo__get_time` 拿到真实时间 `2026/10/8 14:27:39（Asia/Shanghai）` |
+| 话术生成 | `POST /api/ecom {action:'script'}` | 质量分 0.80、无违规、2.8s |
+| Prompt 变体对比 | `"$BUN" run ecom:compare -- --repeat 3` | 3 轮 × 3 变体 × 3 商家 = 27 次调用，30s；报告落盘 `benchmarks/e2e/prompt-comparison.md` |
+| 代码评审（LLM 语义层） | `"$BUN" run review <sessionId> [base]` | 风险分 20/100，2 个问题（1 静态 + 1 由 LLM 发现的边界条件） |
 
-**配额恢复后**，先跑这条确认可用：
+### 6.1 Prompt 变体对比：一个诚实的结论
+
+同一套样本连跑两次，**排名会翻转**（第一次 V2 最优、第二次 V3 最优、3 轮聚合后 V1 最优）：
+
+| 变体 | 3 轮均值 | 单轮区间 | 违规率 |
+|---|---|---|---|
+| V1 直给式 | 0.93 | 0.93~0.93 | 0% |
+| V3 角色扮演 + 反例式 | 0.91 | 0.87~0.93 | 0% |
+| V2 结构约束式 | 0.89 | 0.87~0.93 | 0% |
+
+**真实结论不是「哪个变体最好」，而是**：
+- 三者差距（0.89~0.93）**落在噪声范围内**，n=3 不足以区分 —— 这正是脚本要支持 `--repeat N` 的原因；
+- 真正稳定的发现：**三者违规率都是 0%**，且都最常栽在同一项「含具体数据/事实（非空泛描述）」——
+  这是可执行的改进方向（在 Prompt 里强制要求引用商家真实数值）。
+- ⚠️ 不要把单次运行的排名当结论写进材料。
+
+### 6.2 复现前先确认额度
 
 ```bash
 "$BUN" -e "
@@ -216,9 +243,12 @@ curl --noproxy '*' -X POST http://127.0.0.1:3000/api/ecom \
 
 | 症状 | 原因 / 解决 |
 |---|---|
-| `curl` 返回 `000` | dev server 没起或已被回收 → 重新 `bun run dev` |
+| `curl` 返回 `000` | dev server 没起或已被回收 → 见 §4 重新起 |
+| `bun run dev` 立刻退出、无输出 | 本机已知问题 → 用 `"$NODE" node_modules/next/dist/bin/next dev -p 3000`（§4） |
 | `bun run build` 报 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` | 见 §5 的构建姿势 |
 | `bun run dev` 报 `EPERM ... .next/dev/types` | 生产 `.next` 残留 → 先清 `.next` 再起 dev |
+| Python 清 `.next` 报「成功」但目录还在 | sandbox 的 brokered-fs 让 `rmtree` 抛 EPERM，`ignore_errors=True` 把它吞了 → 在 sandbox 外执行 |
+| Node 报 `No such file or directory` | managed node 版本目录名会漂移（`22.22.2-3`→`22.22.2-6`）→ `ls .../node/versions/` 确认 |
 | Python 报 `No such file or directory` | 用了已失效的 managed python 路径 → 改用 `C:/Python313/python.exe` |
 | LLM 报 `ApiKey已触发限额` | 配额耗尽 → 确定性功能（`e2e` / `ecom` / 单测）不受影响 |
 | LLM 报 429 但**快速失败**了 | 这是**预期行为**：终态错误（配额/鉴权）不重试，避免长时间卡住 |

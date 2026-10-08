@@ -21,6 +21,7 @@ process.env.MCP_SERVERS = JSON.stringify([
 ])
 
 const { runAgent } = await import('../src/lib/agent/loop')
+const { resolveApproval } = await import('../src/lib/agent/approvals')
 const { createWorkspace, sessionDir, workspaceExists } = await import('../src/lib/agent/workspace')
 const { getMcpToolDefs, getMcpReadOnlySet } = await import('../src/lib/agent/mcp-registry')
 
@@ -51,6 +52,14 @@ for await (const ev of runAgent({ sessionId: SID, task, maxSteps: 6, plan: false
   if (ev.type === 'tool_call') {
     usedTools.push(ev.name)
     if (ev.name.startsWith('mcp__')) console.log(`  · 调用 MCP 工具 ${ev.name}`)
+  }
+  // MCP 工具默认 readOnly=false → 需要人工审批。冒烟脚本没有「人」，
+  // 若不自动放行会等到超时按拒绝处理，于是只能验证「调用尝试」而验证不到真实返回。
+  // 这里自动放行，让冒烟真正跑通「发现 → 调用 → 拿到数据」的完整往返。
+  // （权限模型本身由 p0:smoke 专门验证，职责不重叠）
+  if (ev.type === 'approval_required') {
+    console.log(`  ⏸ 审批：${ev.tool}（${ev.reason}）→ 冒烟脚本自动放行`)
+    resolveApproval(ev.id, 'allow')
   }
   if (ev.type === 'tool_result' && ev.name.startsWith('mcp__')) mcpResult = ev.result
   if (ev.type === 'final') finalSummary = ev.summary
