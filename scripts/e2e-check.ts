@@ -209,9 +209,60 @@ section('⑦ 打标纠错回流（规则迭代依据）')
   clearCorrections()
 }
 
-// ===================== ⑧ LLM 可用性探测 =====================
+// ===================== ⑧ 打标评测体系（ground truth + 指标）=====================
 
-section('⑧ LLM 可用性探测（不可用不算失败，属环境问题）')
+section('⑧ 打标评测体系（有 ground truth 才算得准不准）')
+
+{
+  const { evaluateTagging } = await import('../src/lib/ecom/evaluate')
+  const { GOLDEN_SET, CHALLENGE_SET } = await import('../src/lib/ecom/golden')
+  const { classificationReport, cohensKappa, ndcgAtK } = await import('../src/lib/ecom/metrics')
+
+  // 回归集：锁定口径，必须全对
+  const reg = evaluateTagging(undefined, GOLDEN_SET)
+  check('回归集全对（口径未被改坏）', reg.mismatches.length === 0,
+    `${GOLDEN_SET.length} 条 / 失败 ${reg.mismatches.length}`)
+  check('回归集宏 F1 = 100%', reg.overallMacroF1 === 1)
+  check('回归集 Kappa = 1.00（口径可交接）', reg.overallKappa === 1)
+
+  // 挑战集：测泛化，只允许已知能力边界失败
+  const ch = evaluateTagging(undefined, CHALLENGE_SET)
+  const known = new Set(['C03', 'C04', 'C09'])
+  const unexpected = ch.mismatches.filter((m) => !known.has(m.id))
+  check('挑战集无「非已知边界」失败（泛化未退化）', unexpected.length === 0,
+    `${CHALLENGE_SET.length} 条 / 已知边界 ${ch.mismatches.length - unexpected.length} 处`)
+  const singleDims = ch.dimensions.filter((d) => d.kind === 'single')
+  check('挑战集单标签维度全部通过（同义词类已修）',
+    singleDims.every((d) => d.macroF1 === 1), `覆盖 ${singleDims.length} 个维度`)
+  check('挑战集如实暴露痛点维度的能力边界', ch.dimensions.find((d) => d.dimension === 'pain_point')!.macroF1 < 1)
+
+  // 指标函数本身：边界不产生 NaN
+  const empty = classificationReport([], [])
+  check('空集不产生 NaN（否则报告会像坏了）', !Number.isNaN(empty.macro.f1))
+  check('Kappa 退化情形返回确定值', cohensKappa(['a', 'a'], ['a', 'a']).kappa === 1)
+  check('NDCG 完美排序 = 1', Math.abs(ndcgAtK([3, 2, 1], 3) - 1) < 1e-6)
+
+  // 口径单一来源：打标与诊断同源
+  const { gradeMetric } = await import('../src/lib/ecom/thresholds')
+  const { tagHealth } = await import('../src/lib/ecom/tagging')
+  const { evaluateIssues } = await import('../src/lib/ecom/diagnosis')
+  check('打标与诊断读同一份阈值（不再口径分裂）',
+    gradeMetric('conversionRate', 0.022) === 'warning' &&
+    tagHealth({ id: 'x', conversionRate: 0.022 })?.value === 'healthy' &&
+    evaluateIssues({ id: 'x', conversionRate: 0.022 }).issues[0].severity === 'warning')
+  check('口径缺陷已修：全项低于达标线 → 亚健康',
+    tagHealth({ id: 'w', conversionRate: 0.022, refundRate: 0.09, avgResponseSec: 45, traffic: 2000 })?.value === 'at_risk')
+
+  // 校准：诚实性
+  const { calibrate } = await import('../src/lib/ecom/evaluate')
+  const cal = calibrate(GOLDEN_SET)
+  check('阈值校准确实搜索了组合', cal.tried > 100, `${cal.tried} 组`)
+  check('校准如实提示过拟合风险', cal.caveat.includes('过拟合'))
+}
+
+// ===================== ⑨ LLM 可用性探测 =====================
+
+section('⑨ LLM 可用性探测（不可用不算失败，属环境问题）')
 
 let llmOk = false
 let llmNote = ''
@@ -230,7 +281,7 @@ if (llmOk) {
 } else {
   console.log(`  ⚠ LLM 不可用：${llmNote}`)
   console.log('    → 受影响：话术生成、Prompt 变体对比、Agent 端到端、P0 冒烟')
-  console.log('    → 不受影响：以上 ①~⑦ 全部通过（均为确定性逻辑）')
+  console.log('    → 不受影响：以上 ①~⑧ 全部通过（均为确定性逻辑）')
   console.log('    → 说明：终态错误（配额/鉴权）已改为**快速失败**，不会长时间卡住')
 }
 

@@ -54,6 +54,7 @@ DevMate 是一个从零实现的 **Coding Agent 全栈应用**，对标 Claude C
 | 🔁 **审批记忆** | 审批卡片可勾选「以后同类操作不再询问」→ 记进**会话级 allow 规则**。⚠️ 破坏性命令（`rm -rf`）与敏感文件仍在更前置的步骤被拦截，「记住」不会关掉这些闸门 |
 | 🧭 **对话节点导航** | 把每轮「提问 / 回复」标成可跳转节点，点击滚动到对应位置，带 scrollspy 高亮当前节点 —— 长对话里不用一路往上翻 |
 | 🛒 **电商服务商场景** | 把 Agent 能力迁移到电商业务，形成**从原始数据到可执行清单**的闭环：**数据清洗**（多种写法归一 / 异常值拦截 / 去重留痕 / CSV 结构性问题检出）→ **7 维标签打标**（带判定口径、置信度、复核标记）→ **经营诊断 + 任务推荐**（按「影响÷难度」排序）→ **话术生成 + SOP 硬红线质检** → **纠错回流**（归因到规则迭代）。含业务知识库 RAG、**Prompt 变体真实对比**（3 变体 × N 轮重复取均值，实测三者 0.89~0.93 且违规率 0%）、可交互「服务商工作台」面板与批量 CLI |
+| 📏 **打标评测体系** | **有 ground truth 才算得准不准**：24 条回归集（锁定口径）+ 10 条挑战集（用真实口语变体为难规则，暴露 3 处已知能力边界）；指标含 P/R/F1、**Cohen's Kappa**（口径可交接性）、**P@K / NDCG@K**（优先名单质量）、数据质量四维；阈值可配置 + 网格搜索校准（**如实报告「未达显著、易过拟合」**，不吹嘘调参收益）|
 | 🔁 **限流韧性** | LLM 层指数退避重试（429/5xx），长评测链路不中断 |
 
 > ⚠️ **生产落地评估见 [docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)** ——
@@ -271,7 +272,7 @@ bun run demo
 **想先确认「真的能跑」？** 一条命令，不依赖任何外部服务：
 
 ```bash
-bun run e2e    # 端到端自检：44 项断言（清洗/打标/诊断/CSV/知识库/纠错回流）
+bun run e2e    # 端到端自检：57 项断言（清洗/打标/诊断/CSV/知识库/纠错回流）
 ```
 
 它会真实跑一遍「修 bug → 跑测试 → 提交」，并依次展示：
@@ -688,8 +689,12 @@ src/
     bfcl.ts                   # ★ BFCL v4 适配 + 判分器（Berkeley 函数调用权威基准）
     polyglot.ts               # ★ Aider polyglot-benchmark（Exercism JS）适配
   lib/ecom/                     # ★ 电商服务商垂直场景
+    thresholds.ts             # 判定阈值单一来源（两条线三档 + 类目预设）
     cleaning.ts               # 数据清洗（多种写法归一 / 异常值拦截 / 去重留痕）
     pipeline.ts               # CSV 导入导出 + 全链路（清洗→打标→诊断）
+    golden.ts                 # 金标准：24 条回归集 + 10 条挑战集（评测的地基）
+    metrics.ts                # 指标库：P/R/F1 / Kappa / P@K / NDCG@K / 数据质量四维
+    evaluate.ts               # 评测引擎 + 阈值网格搜索校准
     taxonomy.ts               # 7 维标签体系（含判定口径）
     tagging.ts                # 打标引擎（规则优先 + 置信度 + 可解释）
     diagnosis.ts              # 经营诊断 + 任务推荐（按影响/难度排序）
@@ -721,7 +726,8 @@ scripts/bfcl-run.ts            # ★ BFCL v4 评测（native / mcp 两种通道�
 scripts/polyglot-run.ts        # ★ Aider polyglot-benchmark（JS）评测
 scripts/ecom-pipeline.ts       # ★ 电商批量处理 CLI（CSV 清洗→打标→诊断→导出）
 scripts/ecom-prompt-compare.ts # ★ 话术 Prompt 变体对比（支持 --repeat N 取均值，结果落盘）
-scripts/e2e-check.ts           # ★ 端到端全流程自检（44 项断言，不依赖 LLM）
+scripts/ecom-eval.ts           # ★ 打标评测：回归集 + 挑战集 + 阈值校准（非 0 退出可作 CI 门禁）
+scripts/e2e-check.ts           # ★ 端到端全流程自检（57 项断言，不依赖 LLM）
 scripts/mcp-bfcl-server.ts     # 通用 MCP 服务器：把 BFCL 工具集经 MCP 通道暴露
 docs/ci.yml                    # CI 门禁定义（见文件头：启用需 token 具备 workflow scope）
 docs/EVALUATION.md             # 评测方法论（五层体系）
@@ -734,6 +740,8 @@ docs/HANDOVER.md               # ★ 交接文档：从零构建全过程 + 复�
 docs/EXTERNAL-BENCHMARKS.md    # ★ 外部权威基准（BFCL / polyglot）的实测与诚实边界
 docs/ECOM-JD-ALIGNMENT.md      # ★ 与「AI 产品实习生-电商」JD 的逐条对照与诚实缺口
 docs/ECOM-PRD.md               # ★ 电商 AI 能力 PRD（场景优先级 / 指标口径 / 三阶段规划）
+docs/ECOM-VALUE.md             # ★ 真实场景价值与评价指标（谁在用 / 替代了什么 / 诚实边界）
+docs/ECOM-EVALUATION.md        # ★ 评测方法论（回归集 vs 挑战集 / 评测驱动的两轮真实改进）
 docs/E2E-REPRODUCE.md          # ★ 如何复现：从零到跑通的完整步骤
 benchmarks/                    # 真实任务清单 + 构建报告 + 基准报告
 benchmarks/external/           # ★ 外部基准数据（bfcl / polyglot，第三方数据已 gitignore）
@@ -773,7 +781,7 @@ assets/hard-reference/         # 难项目参考解（灵敏度实验基线）
 - [x] **交互体验**：粘底滚动 + 审批记忆（同类操作确认一次）+ 对话节点导航
 - [x] **电商服务商垂直场景**：数据清洗 → 7 维打标 → 经营诊断 + 任务推荐 → 话术生成 + SOP 质检 → 纠错回流（含批量 CLI 与工作台面板）
 - [x] **Prompt 变体真实对比**：3 变体 × 3 轮重复取均值（`bun run ecom:compare -- --repeat 3`）；顺带发现「单次排名不可信」并修正了评测方法
-- [x] **端到端自检**：44 项断言、不依赖 LLM（`bun run e2e`），可作 CI 门禁
+- [x] **端到端自检**：57 项断言、不依赖 LLM（`bun run e2e`），可作 CI 门禁
 - [ ] **真容器沙箱**：把「进程内 + 命令白名单」换成容器隔离（P0，见生产评估文档）
 - [ ] **Hooks**：工具调用前后的自定义钩子
 - [ ] **prompt cache 友好的上下文布局**（实测命中率已有 90%，继续优化空间明确）

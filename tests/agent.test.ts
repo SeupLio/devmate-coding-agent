@@ -2281,3 +2281,184 @@ describe('打标纠错回流（tag-store）', () => {
     }
   })
 })
+
+// ===================== 电商评测体系：指标库 =====================
+
+describe('评价指标库（metrics）', () => {
+  test('分类报告：全对 / 全错 / 空集都不产生 NaN', async () => {
+    const { classificationReport } = await import('@/lib/ecom/metrics')
+
+    const perfect = classificationReport(['a', 'b', 'a'], ['a', 'b', 'a'])
+    expect(perfect.accuracy).toBe(1)
+    expect(perfect.macro.f1).toBe(1)
+
+    const allWrong = classificationReport(['a', 'b'], ['b', 'a'])
+    expect(allWrong.accuracy).toBe(0)
+
+    // 空集必须返回确定值而不是 NaN —— 否则报告里出现 NaN，运营会以为系统坏了
+    const empty = classificationReport([], [])
+    expect(empty.accuracy).toBe(0)
+    expect(Number.isNaN(empty.macro.f1)).toBe(false)
+    expect(empty.total).toBe(0)
+  })
+
+  test('**null 语义**：真实「不打标」+ 预测「不打标」算正确；误标/漏标分别拉低 P / R', async () => {
+    const { classificationReport } = await import('@/lib/ecom/metrics')
+    // 3 条：1 条正确不打标、1 条误标（真实 null 预测有值）、1 条正确
+    const r = classificationReport(['a', null, 'a'], ['a', 'a', 'a'])
+    expect(r.accuracy).toBeCloseTo(2 / 3, 5) // null/null 那条算对，null/a 那条算错
+    const clsA = r.perClass.find((c) => c.label === 'a')!
+    expect(clsA.fp).toBe(1) // 误标计入 FP
+  })
+
+  test('多标签报告：完全匹配率 与 逐标签 F1 是两件事', async () => {
+    const { multiLabelReport } = await import('@/lib/ecom/metrics')
+    // 第 1 条完全对；第 2 条多了一个标签（部分对）
+    const r = multiLabelReport([['x'], ['y']], [['x'], ['y', 'z']])
+    expect(r.subsetAccuracy).toBe(0.5) // 只有第 1 条完全匹配
+    const y = r.perLabel.find((l) => l.label === 'y')!
+    expect(y.tp).toBe(1) // y 本身命中了，所以逐标签 F1 不为 0
+    expect(y.recall).toBe(1)
+  })
+
+  test('Cohen Kappa：完全一致=1；单类别且完全一致也必须返回 1（不是 NaN）', async () => {
+    const { cohensKappa, interpretKappa } = await import('@/lib/ecom/metrics')
+    expect(cohensKappa(['a', 'b', 'c'], ['a', 'b', 'c']).kappa).toBe(1)
+    // pe = 1 的退化情形：双方都只用一个类别
+    expect(cohensKappa(['a', 'a'], ['a', 'a']).kappa).toBe(1)
+    expect(cohensKappa(['a', 'a'], ['b', 'b']).kappa).toBe(0)
+    // 随机水平的一致性应接近 0
+    const k = cohensKappa(['a', 'b', 'a', 'b'], ['b', 'a', 'b', 'a']).kappa
+    expect(k).toBeLessThan(0)
+    expect(interpretKappa(0.9)).toContain('极好')
+    expect(interpretKappa(0.1)).toContain('差')
+  })
+
+  test('排序指标：完美排序 NDCG=1；顺序颠倒应明显更低', async () => {
+    const { ndcgAtK, precisionAtK } = await import('@/lib/ecom/metrics')
+    const ideal = [3, 2, 1]
+    expect(ndcgAtK(ideal, 3)).toBeCloseTo(1, 5)
+    const reversed = [1, 2, 3]
+    expect(ndcgAtK(reversed, 3)).toBeLessThan(0.9)
+    expect(precisionAtK(ideal, 3)).toBeCloseTo(1 / 3, 5) // 只有 1 个 relevance>=3
+    expect(precisionAtK([3, 3, 3], 3)).toBe(1)
+    // 空集不崩
+    expect(ndcgAtK([], 3)).toBe(0)
+    expect(precisionAtK([], 3)).toBe(0)
+  })
+
+  test('数据质量四维：四维都算得出来，且能定位最弱一维', async () => {
+    const { dataQualityMetrics, weakestOf } = await import('@/lib/ecom/metrics')
+    const m = dataQualityMetrics({
+      rows: 10,
+      validRows: 9,
+      completeness: { a: 1, b: 0.5 },
+      outliers: 0,
+      structuralIssues: 0,
+      duplicates: 1,
+    })
+    expect(m.completeness).toBeCloseTo(0.75, 5)
+    expect(m.uniqueness).toBeCloseTo(0.9, 5)
+    expect(m.overall).toBeGreaterThan(0)
+    const w = weakestOf({ completeness: 0.75, accuracy: 1, consistency: 1, uniqueness: 0.9 })!
+    expect(w.key).toBe('completeness')
+  })
+})
+
+// ===================== 电商评测体系：口径与回归锁定 =====================
+
+describe('打标口径与评测体系', () => {
+  test('**口径单一来源**：打标与诊断对同一商家必须给出同源结论', async () => {
+    const { gradeMetric, isCritical } = await import('@/lib/ecom/thresholds')
+    const { tagHealth } = await import('@/lib/ecom/tagging')
+    const { evaluateIssues } = await import('@/lib/ecom/diagnosis')
+
+    // 转化率 2.2%：在达标线(2.5%)下、严重线(2.0%)上 → 诊断应为 warning，打标不应算「严重项」
+    expect(gradeMetric('conversionRate', 0.022)).toBe('warning')
+    expect(isCritical('conversionRate', 0.022)).toBe(false)
+    const rec = { id: 'x', conversionRate: 0.022 }
+    expect(tagHealth(rec)?.value).toBe('healthy')
+    expect(evaluateIssues(rec).issues[0].severity).toBe('warning')
+
+    // 转化率 1.2%：跌破严重线 → 打标「亚健康」+ 诊断 critical
+    expect(tagHealth({ id: 'y', conversionRate: 0.012 })?.value).toBe('at_risk')
+    expect(evaluateIssues({ id: 'y', conversionRate: 0.012 }).issues[0].severity).toBe('critical')
+  })
+
+  test('**口径缺陷已修**：四项指标全低于达标线 → 亚健康（不是健康）', async () => {
+    const { tagHealth } = await import('@/lib/ecom/tagging')
+    // 全部落在预警区（无严重项）：旧口径会判「健康」，这是被挑战集 C07 暴露的漏洞
+    const allWarn = { id: 'w', conversionRate: 0.022, refundRate: 0.09, avgResponseSec: 45, traffic: 2000 }
+    expect(tagHealth(allWarn)?.value).toBe('at_risk')
+    // 但「三项预警 + 一项达标」仍是健康 —— 达标线是优秀线，不能一低于就判亚健康
+    const threeWarn = { id: 'w2', conversionRate: 0.022, refundRate: 0.09, avgResponseSec: 45, traffic: 5000 }
+    expect(tagHealth(threeWarn)?.value).toBe('healthy')
+  })
+
+  test('**优先级只看严重项**：全项平庸不该占用 P0（稀缺资源）', async () => {
+    const { tagMerchant } = await import('@/lib/ecom/tagging')
+    // 腰部 + 全项预警（0 严重项）→ 亚健康，但优先级应是 P1 而非 P0
+    const r = tagMerchant({ id: 'p', monthlyGmv: 200_000, conversionRate: 0.022, refundRate: 0.09, avgResponseSec: 45, traffic: 2000 })
+    expect(r.tags.find((t) => t.dimension === 'health')?.value).toBe('at_risk')
+    expect(r.tags.find((t) => t.dimension === 'priority')?.value).toBe('p1')
+  })
+
+  test('**回归集必须全对**：任何不一致都说明改动破坏了已定口径', async () => {
+    const { evaluateTagging } = await import('@/lib/ecom/evaluate')
+    const { GOLDEN_SET } = await import('@/lib/ecom/golden')
+    const r = evaluateTagging(undefined, GOLDEN_SET)
+    if (r.mismatches.length) {
+      console.log('回归集差异：', r.mismatches.map((m) => `${m.id}[${m.dimension}] ${m.expected}→${m.predicted}`).join(' | '))
+    }
+    expect(r.mismatches.length).toBe(0)
+    expect(r.overallMacroF1).toBe(1)
+    expect(r.overallKappa).toBe(1)
+  })
+
+  test('**挑战集：只允许 3 处已知能力边界失败**（数量变多 = 泛化能力退化）', async () => {
+    const { evaluateTagging } = await import('@/lib/ecom/evaluate')
+    const { CHALLENGE_SET } = await import('@/lib/ecom/golden')
+    const r = evaluateTagging(undefined, CHALLENGE_SET)
+    const knownBoundary = new Set(['C03', 'C04', 'C09'])
+    const unexpected = r.mismatches.filter((m) => !knownBoundary.has(m.id))
+    expect(unexpected.map((m) => m.id)).toEqual([])
+    // 单标签维度应全部通过（同义词类失败已在词表修复中解决）
+    const singleDims = r.dimensions.filter((d) => d.kind === 'single')
+    for (const d of singleDims) expect(d.macroF1).toBe(1)
+  })
+
+  test('挑战集能覆盖三类真实泛化场景（同义词 / 否定 / 文本数字）', async () => {
+    const { CHALLENGE_SET } = await import('@/lib/ecom/golden')
+    const covers = CHALLENGE_SET.map((c) => c.covers).join('\n')
+    expect(covers).toContain('词表覆盖')
+    expect(covers).toContain('能力边界')
+    expect(covers).toContain('对照组') // 挑战集不能「为了挑错而挑错」
+  })
+
+  test('阈值可配置：换类目预设会改变判定结果（证明阈值不是写死的）', async () => {
+    const { PRESETS, DEFAULT_THRESHOLDS } = await import('@/lib/ecom/thresholds')
+    const { tagHealth } = await import('@/lib/ecom/tagging')
+    // 退款率 12%：通用口径下跌破严重线 → 亚健康
+    const rec = { id: 'c', refundRate: 0.12, conversionRate: 0.03, avgResponseSec: 25, traffic: 5000 }
+    expect(tagHealth(rec, DEFAULT_THRESHOLDS)?.value).toBe('at_risk')
+    // 服饰类目预设把退款严重线放到 18% → 同一商家应判健康
+    expect(tagHealth(rec, PRESETS.apparel)?.value).toBe('healthy')
+  })
+
+  test('金标准集覆盖检查：各维度都有多个取值（没有样本盲区）', async () => {
+    const { goldenCoverage } = await import('@/lib/ecom/golden')
+    const cov = goldenCoverage()
+    expect(Object.keys(cov.health).length).toBeGreaterThanOrEqual(3)
+    expect(Object.keys(cov.priority).length).toBeGreaterThanOrEqual(3)
+    expect(Object.keys(cov.scale).length).toBeGreaterThanOrEqual(3)
+  })
+
+  test('校准在样本量不足时会**如实报告未达显著**（不吹嘘调参收益）', async () => {
+    const { calibrate } = await import('@/lib/ecom/evaluate')
+    const r = calibrate()
+    expect(r.tried).toBeGreaterThan(100) // 确实搜索了
+    // n=24 且 6 个参数 → 必须诚实提示过拟合风险，且不宣称显著提升
+    expect(r.caveat).toContain('过拟合')
+    if (r.gain < 0.05) expect(r.significant).toBe(false)
+  })
+})
