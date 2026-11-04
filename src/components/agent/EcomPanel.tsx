@@ -69,9 +69,9 @@ interface ScriptResult {
 }
 
 const SEV_STYLE: Record<string, string> = {
-  critical: 'bg-red-100 text-red-700 border-red-300',
-  warning: 'bg-amber-100 text-amber-700 border-amber-300',
-  ok: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  critical: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800',
+  warning: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
+  ok: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
 }
 
 export function EcomPanel() {
@@ -98,6 +98,8 @@ export function EcomPanel() {
   }, [])
 
   useEffect(() => {
+    // 存量模式：挂载即拉取商户数据（load 内首个 setState 为同步 setLoading）
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
   }, [load])
 
@@ -185,7 +187,7 @@ export function EcomPanel() {
               key={m.id}
               onClick={() => { setActiveId(m.id); setScript(null) }}
               className={`w-full rounded-md border p-2 text-left transition-colors ${
-                activeRow ? 'border-emerald-400 bg-emerald-50/50' : 'hover:bg-muted'
+                activeRow ? 'border-emerald-400 bg-emerald-50/50 dark:border-emerald-700 dark:bg-emerald-950/40' : 'hover:bg-muted'
               }`}
             >
               <div className="flex items-center gap-1.5">
@@ -194,8 +196,8 @@ export function EcomPanel() {
                   <Badge
                     variant="outline"
                     className={`text-[9px] ${
-                      pri.value === 'p0' ? 'border-red-300 text-red-700'
-                        : pri.value === 'p1' ? 'border-amber-300 text-amber-700'
+                      pri.value === 'p0' ? 'border-red-300 text-red-700 dark:border-red-800 dark:text-red-300'
+                        : pri.value === 'p1' ? 'border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300'
                           : 'border-muted text-muted-foreground'
                     }`}
                   >
@@ -213,7 +215,7 @@ export function EcomPanel() {
                     <span
                       key={t.dimension}
                       className={`rounded border px-1 py-0.5 text-[9px] ${
-                        t.needReview ? 'border-amber-300 text-amber-700' : 'border-muted text-muted-foreground'
+                        t.needReview ? 'border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300' : 'border-muted text-muted-foreground'
                       }`}
                       title={t.evidence}
                     >

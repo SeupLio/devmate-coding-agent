@@ -125,7 +125,7 @@ export function EvalPanel() {
       )}
 
       {state.error && (
-        <p className="rounded bg-red-50 p-2 text-xs text-red-600">{state.error}</p>
+        <p className="rounded bg-red-50 p-2 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">{state.error}</p>
       )}
 
       {state.report && (
@@ -184,7 +184,7 @@ function TaskResultCard({ task }: { task: EvalTaskResultUI }) {
         ))}
       </ul>
       {!task.passed && task.diagnosis && (
-        <p className="mt-1 rounded bg-amber-50 p-1.5 text-[10px] text-amber-700">
+        <p className="mt-1 rounded bg-amber-50 p-1.5 text-[10px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
           失败模式：{task.diagnosis.label}
           {task.diagnosis.evidence.length > 0 && `（${task.diagnosis.evidence[0]}）`}
         </p>

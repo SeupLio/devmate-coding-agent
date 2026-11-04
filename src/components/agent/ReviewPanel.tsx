@@ -34,9 +34,9 @@ interface ReviewResult {
 }
 
 const SEVERITY_STYLE: Record<Severity, { label: string; cls: string }> = {
-  blocker: { label: '阻塞', cls: 'bg-red-100 text-red-700 border-red-300' },
-  major: { label: '重要', cls: 'bg-amber-100 text-amber-700 border-amber-300' },
-  minor: { label: '次要', cls: 'bg-sky-100 text-sky-700 border-sky-300' },
+  blocker: { label: '阻塞', cls: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800' },
+  major: { label: '重要', cls: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800' },
+  minor: { label: '次要', cls: 'bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800' },
   nit: { label: '建议', cls: 'bg-muted text-muted-foreground border-muted' },
 }
 

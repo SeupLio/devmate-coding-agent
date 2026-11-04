@@ -144,7 +144,7 @@ export function ConversationNav({
                 key={n.id}
                 onClick={() => jumpTo(n.id)}
                 className={`flex w-full items-start gap-1.5 rounded px-1.5 py-1 text-left text-[10px] leading-tight transition-colors ${
-                  active ? 'bg-emerald-50 text-emerald-800' : 'text-muted-foreground hover:bg-muted'
+                  active ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300' : 'text-muted-foreground hover:bg-muted'
                 }`}
                 title={n.label}
               >

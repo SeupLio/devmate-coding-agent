@@ -20,7 +20,7 @@ export type SSEEvent =
   | { type: 'reasoning'; text: string }
   | { type: 'token'; text: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
-  | { type: 'tool_result'; id: string; name: string; result: string; ok: boolean }
+  | { type: 'tool_result'; id: string; name: string; result: string; ok: boolean; durationMs?: number }
   | { type: 'todos'; todos: TodoItemUI[] }
   | { type: 'context'; tokensBefore: number; tokensAfter: number; compressedCount: number }
   /** 权限判定结果（审计用；deny 时值得在 UI 上提示） */
@@ -64,6 +64,7 @@ export interface UIToolCall {
   args: unknown
   result?: string
   ok?: boolean
+  durationMs?: number
   status: 'running' | 'done'
 }
 
@@ -141,3 +142,11 @@ export type EvalSSEEvent =
   | { type: 'task_done'; taskId?: string; name?: string; result: EvalTaskResultUI }
   | { type: 'run_done'; report: EvalReportUI }
   | { type: 'error'; message: string }
+
+/** GET /api/health 返回结构（启动时探测一次） */
+export interface HealthInfo {
+  ok: boolean
+  llm: { provider: string; model: string; configured: boolean }
+  db: boolean
+  mcp: { servers: number }
+}

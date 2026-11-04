@@ -16,8 +16,9 @@ export function HostBadge() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    // 只在客户端探测（SSR 时没有 window）
+    // 只在客户端探测（SSR 时没有 window）——只能在 effect 里探测宿主环境，精确豁免
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setInfo(getHostBridge().info)
     } catch {
       /* 探测失败就不显示徽标 */
@@ -40,7 +41,7 @@ export function HostBadge() {
         <Icon className="h-3 w-3" />
         {info.label}
         {missing.length > 0 && (
-          <span className="rounded bg-amber-100 px-1 text-[9px] text-amber-700">
+          <span className="rounded bg-amber-100 px-1 text-[9px] text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
             {missing.length} 项降级
           </span>
         )}

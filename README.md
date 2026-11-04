@@ -780,6 +780,7 @@ assets/hard-reference/         # 难项目参考解（灵敏度实验基线）
 - [x] **跨端 WebView 适配**：宿主探测（浏览器/Electron/UE/Maya）+ 统一桥 + 显式降级
 - [x] **外部权威基准**：BFCL v4（函数调用）+ Aider polyglot（Exercism JS），题目/答案由外部定义
 - [x] **交互体验**：粘底滚动 + 审批记忆（同类操作确认一次）+ 对话节点导航
+- [x] **界面体验升级**（2026-11）：助手回复 Markdown 渲染（GFM 表格 / 代码块高亮 + 一键复制）；工具卡 diff 视图（edit/multi_edit 红绿对照、终端样式输出、执行耗时）；工作区代码预览语法高亮 + 行号；暗色模式一键切换；会话列表状态徽章 / 相对时间 / 删除（含磁盘工作区清理）；LLM 预检（未配置密钥时首屏引导，而不是发消息才报 500）
 - [x] **电商服务商垂直场景**：数据清洗 → 7 维打标 → 经营诊断 + 任务推荐 → 话术生成 + SOP 质检 → 纠错回流（含批量 CLI 与工作台面板）
 - [x] **Prompt 变体真实对比**：3 变体 × 3 轮重复取均值（`bun run ecom:compare -- --repeat 3`）；顺带发现「单次排名不可信」并修正了评测方法
 - [x] **端到端自检**：57 项断言、不依赖 LLM（`bun run e2e`），可作 CI 门禁
@@ -790,7 +791,8 @@ assets/hard-reference/         # 难项目参考解（灵敏度实验基线）
 - [ ] **多框架对照**：与 LangChain / 其他 Agent 实现跑同一批任务
 - [ ] **多模型矩阵**：用成本账本对比不同模型的质量/成本/延迟
 - [ ] **向量检索升级**：TF-IDF → 真实 embedding（当前为离线确定性方案）
-- [ ] diff 视图 + 编辑回滚
+- [x] diff 视图（工具卡级红绿对照 + git diff 着色）
+- [ ] 编辑回滚（一键 revert 某次 edit_file）
 - [ ] 跨端 WebView 适配（Electron / UE / Maya 内嵌面板）
 
 > 完整的「还差什么、优先级怎么排」见 **[docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md)**

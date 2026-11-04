@@ -44,7 +44,13 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills"]
+  // shadcn CLI / 模板生成的脚手架代码：保持原样不手改，按文件关闭 React Compiler 的严格规则
+  files: ["src/components/ui/carousel.tsx", "src/hooks/use-mobile.ts", "src/lib/hooks/use-stick-to-bottom.ts"],
+  rules: {
+    "react-hooks/set-state-in-effect": "off",
+  },
+}, {
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills", "assets/**", "traces/**", "workspace/**", "reports/**"]
 }];
 
 export default eslintConfig;

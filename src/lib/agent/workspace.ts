@@ -68,6 +68,18 @@ export function workspaceExists(sessionId: string) {
   return fs.existsSync(sessionDir(sessionId))
 }
 
+/**
+ * 删除会话对应的磁盘工作区（会话删除时调用，避免 workspace/ 目录无限膨胀）。
+ * 幂等：目录不存在时静默成功。
+ */
+export function deleteWorkspace(sessionId: string) {
+  try {
+    fs.rmSync(sessionDir(sessionId), { recursive: true, force: true })
+  } catch {
+    /* 目录缺失 / 被占用：不影响会话删除本身 */
+  }
+}
+
 function copyDir(src: string, dest: string) {
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const s = path.join(src, entry.name)

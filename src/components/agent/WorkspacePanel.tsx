@@ -4,6 +4,32 @@ import { useCallback, useEffect, useState } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { Download, File, Folder, FolderOpen, RefreshCw } from 'lucide-react'
+import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter/dist/esm/prism-async-light'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
+import css from 'react-syntax-highlighter/dist/esm/languages/prism/css'
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript'
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
+import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx'
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown'
+import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup'
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python'
+import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx'
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
+
+// 注册常用语言（其余扩展名回退为纯文本）
+SyntaxHighlighter.registerLanguage('javascript', javascript)
+SyntaxHighlighter.registerLanguage('typescript', typescript)
+SyntaxHighlighter.registerLanguage('jsx', jsx)
+SyntaxHighlighter.registerLanguage('tsx', tsx)
+SyntaxHighlighter.registerLanguage('json', json)
+SyntaxHighlighter.registerLanguage('markup', markup)
+SyntaxHighlighter.registerLanguage('css', css)
+SyntaxHighlighter.registerLanguage('bash', bash)
+SyntaxHighlighter.registerLanguage('python', python)
+SyntaxHighlighter.registerLanguage('markdown', markdown)
+SyntaxHighlighter.registerLanguage('yaml', yaml)
 
 interface FileNode {
   name: string
@@ -15,6 +41,25 @@ interface FileNode {
 
 /** 这些扩展名不做文本预览，改为提供下载（生成的 docx/pptx 等） */
 const BINARY_RE = /\.(docx?|pptx?|xlsx?|pdf|zip|gz|png|jpe?g|gif|webp|ico|woff2?|ttf|mp4)$/i
+
+/** 扩展名 → Prism 语言（含 markdown 文件显示元信息） */
+const EXT_LANG: Record<string, string> = {
+  js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript', mts: 'typescript',
+  jsx: 'jsx', tsx: 'tsx',
+  json: 'json', jsonc: 'json',
+  html: 'markup', xml: 'markup', svg: 'markup',
+  css: 'css', scss: 'css',
+  sh: 'bash', bash: 'bash', zsh: 'bash',
+  py: 'python',
+  md: 'markdown', mdx: 'markdown',
+  yml: 'yaml', yaml: 'yaml',
+}
+
+function langOf(path: string): string | undefined {
+  const ext = path.split('.').pop()?.toLowerCase()
+  return ext ? EXT_LANG[ext] : undefined
+}
 
 export function WorkspacePanel({ sessionId, refreshKey }: { sessionId: string | null; refreshKey: number }) {
   const [tree, setTree] = useState<FileNode[]>([])
@@ -34,6 +79,8 @@ export function WorkspacePanel({ sessionId, refreshKey }: { sessionId: string | 
   }, [sessionId])
 
   useEffect(() => {
+    // 存量模式：会话/刷新切换时清空选中文件。改为 render 期重置需要更大重构，先精确豁免
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFile(null)
     loadTree()
   }, [loadTree, refreshKey])
@@ -51,6 +98,8 @@ export function WorkspacePanel({ sessionId, refreshKey }: { sessionId: string | 
 
   const downloadUrl = (path: string) =>
     `/api/workspace/${sessionId}?file=${encodeURIComponent(path)}&download=1`
+
+  const lineCount = file?.content ? file.content.split('\n').length : 0
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -76,9 +125,12 @@ export function WorkspacePanel({ sessionId, refreshKey }: { sessionId: string | 
               <Badge variant="outline" className="font-mono text-[10px]">
                 {file.path}
               </Badge>
+              {!file.binary && lineCount > 0 && (
+                <span className="text-[10px] text-muted-foreground">{lineCount} 行</span>
+              )}
               <a
                 href={downloadUrl(file.path)}
-                className="flex items-center gap-1 text-[10px] text-emerald-700 hover:underline"
+                className="flex items-center gap-1 text-[10px] text-emerald-700 hover:underline dark:text-emerald-400"
                 download
               >
                 <Download className="h-3 w-3" /> 下载
@@ -88,6 +140,21 @@ export function WorkspacePanel({ sessionId, refreshKey }: { sessionId: string | 
               <p className="rounded-md bg-muted p-3 text-[11px] text-muted-foreground">
                 二进制文件（如 .docx / .pptx），无法文本预览 —— 点上方「下载」用本机 Office / WPS 打开。
               </p>
+            ) : langOf(file.path) ? (
+              <SyntaxHighlighter
+                language={langOf(file.path)}
+                style={oneDark}
+                showLineNumbers
+                customStyle={{
+                  margin: 0,
+                  borderRadius: 6,
+                  fontSize: '11px',
+                  maxHeight: '100%',
+                }}
+                codeTagProps={{ style: { fontFamily: 'var(--font-geist-mono), monospace' } }}
+              >
+                {file.content}
+              </SyntaxHighlighter>
             ) : (
               <pre className="overflow-auto rounded-md bg-muted p-3 font-mono text-[11px] leading-relaxed">
                 {file.content}

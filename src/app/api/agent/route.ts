@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
             })
           } else if (ev.type === 'tool_result') {
             await db.message.create({
-              data: { sessionId, role: 'tool_result', content: ev.name, meta: JSON.stringify({ result: ev.result.slice(0, 2000), ok: ev.ok }) },
+              data: { sessionId, role: 'tool_result', content: ev.name, meta: JSON.stringify({ result: ev.result.slice(0, 2000), ok: ev.ok, durationMs: ev.durationMs }) },
             })
           } else if (ev.type === 'plan') {
             await db.message.create({

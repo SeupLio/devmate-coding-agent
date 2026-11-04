@@ -15,9 +15,13 @@ import { ReviewPanel } from '@/components/agent/ReviewPanel'
 import { EcomPanel } from '@/components/agent/EcomPanel'
 import { HostBadge } from '@/components/agent/HostBadge'
 import { ConversationNav } from '@/components/agent/ConversationNav'
+import { MarkdownView } from '@/components/agent/MarkdownView'
+import { HealthBanner, HealthPill } from '@/components/agent/HealthPill'
+import { ThemeToggle } from '@/components/agent/ThemeToggle'
 import { useStickToBottom } from '@/lib/hooks/use-stick-to-bottom'
 import type {
   AgentStats,
+  HealthInfo,
   PermissionModeUI,
   SessionInfo,
   SSEEvent,
@@ -26,6 +30,7 @@ import type {
 } from '@/components/agent/types'
 import {
   Activity,
+  AlertTriangle,
   Bot,
   Brain,
   GitBranch,
@@ -35,7 +40,7 @@ import {
   ShieldAlert,
   Sparkles,
   Square,
-  User,
+  Trash2,
   Zap,
 } from 'lucide-react'
 
@@ -56,6 +61,7 @@ export default function Home() {
   const [showReasoning, setShowReasoning] = useState(true)
   const [planMode, setPlanMode] = useState<'auto' | 'on' | 'off'>('auto')
   const [deepThinking, setDeepThinking] = useState(true)
+  const [health, setHealth] = useState<HealthInfo | null>(null)
   /** 权限模式（P0）：default 每次写/执行都问；plan 只读；acceptEdits 自动接受编辑 */
   const [permissionMode, setPermissionMode] = useState<PermissionModeUI>('default')
   /** 当前是否处于一段连续的「思考」中（用于把同一次思考合并成一个块） */
@@ -110,6 +116,25 @@ export default function Home() {
     loadSessions()
   }, [loadSessions])
 
+  // 启动预检：LLM 凭证 / 数据库是否就绪。未配置时给出引导，而不是让第一条消息撞 500。
+  useEffect(() => {
+    fetch('/api/health')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((h: HealthInfo | null) => setHealth(h))
+      .catch(() => setHealth(null))
+  }, [])
+
+  const deleteSession = async (id: string) => {
+    await fetch(`/api/sessions/${id}`, { method: 'DELETE' }).catch(() => null)
+    if (activeId === id) {
+      setActiveId(null)
+      setMessages([])
+      setStats(null)
+      setTodos([])
+    }
+    loadSessions()
+  }
+
   // 「粘底」滚动：流式输出时自动跟到最新，但用户往上翻时不打断他
   const dep = messages.length + (messages[messages.length - 1]?.text?.length ?? 0)
   const { containerRef, pinned, showJumpButton, scrollToBottom } = useStickToBottom<HTMLDivElement>(dep)
@@ -120,20 +145,56 @@ export default function Home() {
     const { session } = await res.json()
     setActiveId(id)
     setStats(null)
-    // 将持久化消息还原为 UI 消息
-    const ui: UIMessage[] = (session.messages ?? []).map((m: Record<string, unknown>, i: number) => {
-      if (m.role === 'user') return { id: `h${i}`, kind: 'user', text: String(m.content) }
-      if (m.role === 'assistant') return { id: `h${i}`, kind: 'assistant', text: String(m.content) }
-      if (m.role === 'plan')
-        return { id: `h${i}`, kind: 'plan', steps: JSON.parse(String(m.content || '[]')) as string[] }
-      if (m.role === 'tool_call')
-        return {
-          id: `h${i}`,
+    // 将持久化消息还原为 UI 消息。
+    // tool_call 与其 tool_result 是两条相邻记录 → 就地合并成一张带结果/耗时/成败的完整工具卡
+    const ui: UIMessage[] = []
+    let msgIdx = 0
+    for (const m of (session.messages ?? []) as Record<string, unknown>[]) {
+      const id = `h${msgIdx++}`
+      if (m.role === 'user') {
+        ui.push({ id, kind: 'user', text: String(m.content) })
+      } else if (m.role === 'assistant') {
+        const text = String(m.content)
+        // [执行异常] 前缀是错误消息的持久化形态
+        if (text) ui.push({ id, kind: text.startsWith('[执行异常]') ? 'error' : 'assistant', text })
+      } else if (m.role === 'plan') {
+        ui.push({ id, kind: 'plan', steps: JSON.parse(String(m.content || '[]')) as string[] })
+      } else if (m.role === 'tool_call') {
+        ui.push({
+          id,
           kind: 'tool',
-          tool: { id: `h${i}`, name: String(m.content), args: JSON.parse(String(m.meta ?? '{}')), status: 'done', ok: true },
+          tool: {
+            id,
+            name: String(m.content),
+            args: JSON.parse(String(m.meta ?? '{}')),
+            status: 'running',
+          },
+        })
+      } else if (m.role === 'tool_result') {
+        let meta: { result?: string; ok?: boolean; durationMs?: number } = {}
+        try {
+          meta = JSON.parse(String(m.meta ?? '{}'))
+        } catch {
+          /* 旧记录格式容错 */
         }
-      return { id: `h${i}`, kind: 'assistant', text: '' }
-    })
+        for (let j = ui.length - 1; j >= 0; j--) {
+          const prev = ui[j]
+          if (prev.kind === 'tool' && prev.tool && prev.tool.status === 'running') {
+            ui[j] = {
+              ...prev,
+              tool: {
+                ...prev.tool,
+                result: meta.result,
+                ok: meta.ok ?? true,
+                durationMs: meta.durationMs,
+                status: 'done',
+              },
+            }
+            break
+          }
+        }
+      }
+    }
     setMessages(ui)
     setFileRefreshKey((k) => k + 1)
   }
@@ -149,6 +210,7 @@ export default function Home() {
     setActiveId(session.id)
     setMessages([])
     setStats(null)
+    setTodos([])
     setFileRefreshKey((k) => k + 1)
   }
 
@@ -268,7 +330,7 @@ export default function Home() {
           setMessages((ms) =>
             ms.map((m) =>
               m.kind === 'tool' && m.tool?.id === ev.id
-                ? { ...m, tool: { ...m.tool, result: ev.result, ok: ev.ok, status: 'done' } }
+                ? { ...m, tool: { ...m.tool, result: ev.result, ok: ev.ok, durationMs: ev.durationMs, status: 'done' } }
                 : m,
             ),
           )
@@ -356,12 +418,12 @@ export default function Home() {
           <Bot className="h-4.5 w-4.5" />
         </div>
         <div>
-          <h1 className="text-sm font-bold leading-tight">DevMate Coding Agent</h1>
+          <h1 className="text-sm font-bold leading-tight">DevMate · 浏览器端 Coding Agent</h1>
           <p className="text-[10px] text-muted-foreground">
             Next.js 16 · React · TypeScript · Tool Calling · SSE 流式
           </p>
         </div>
-        <Badge variant="outline" className="ml-2 hidden gap-1 border-emerald-200 text-emerald-700 sm:flex">
+        <Badge variant="outline" className="ml-2 hidden gap-1 border-emerald-200 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300 sm:flex">
           <GitBranch className="h-3 w-3" /> 沙箱 Git / 文件 / 终端 / 测试
         </Badge>
         {/* 跨端宿主徽标：显示当前跑在什么 WebView 里、哪些能力降级了 */}
@@ -369,14 +431,21 @@ export default function Home() {
         <div className="ml-auto flex items-center gap-2">
           {stats && (
             <span className="hidden font-mono text-[10px] text-muted-foreground md:inline">
-              {stats.steps} 步 · {stats.toolCalls} 次工具调用 · {(stats.durationMs / 1000).toFixed(1)}s
+              {stats.steps} 步 · {stats.toolCalls} 次工具 · ~{stats.tokensUsed} token · {(stats.durationMs / 1000).toFixed(1)}s
             </span>
           )}
+          <HealthPill health={health} />
+          <ThemeToggle />
           <Button size="sm" variant="outline" onClick={newSession}>
             <Plus className="h-3.5 w-3.5" /> 新任务
           </Button>
         </div>
       </header>
+
+      {/* LLM 未配置时给引导（比让第一条消息撞 500 好得多） */}
+      <div className="shrink-0 px-4 pt-2">
+        <HealthBanner health={health} />
+      </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-12 gap-0">
         {/* 左：会话列表 */}
@@ -387,14 +456,28 @@ export default function Home() {
             )}
             <ul className="space-y-1">
               {sessions.map((s) => (
-                <li key={s.id}>
+                <li key={s.id} className="group relative">
                   <button
                     onClick={() => openSession(s.id)}
-                    className={`w-full truncate rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted ${
+                    className={`w-full rounded-md px-2 py-1.5 pr-6 text-left text-xs hover:bg-muted ${
                       activeId === s.id ? 'bg-muted font-medium' : 'text-muted-foreground'
                     }`}
                   >
-                    {s.title}
+                    <span className="flex items-center gap-1.5">
+                      <SessionStatusDot status={s.status} />
+                      <span className="truncate">{s.title}</span>
+                    </span>
+                    <span className="mt-0.5 block truncate pl-3 text-[10px] opacity-60">
+                      {relTime(s.updatedAt)}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => deleteSession(s.id)}
+                    className="absolute right-1 top-1 hidden rounded p-1 text-muted-foreground/60 hover:bg-red-50 hover:text-red-500 group-hover:block dark:hover:bg-red-950/50"
+                    title="删除会话（连同沙箱工作区）"
+                    aria-label={`删除会话 ${s.title}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 </li>
               ))}
@@ -407,7 +490,7 @@ export default function Home() {
           <div ref={containerRef} className="relative min-h-0 flex-1">
             <ScrollArea className="h-full p-4">
               {todos.length > 0 && <TodoPanel todos={todos} />}
-              {messages.length === 0 && <EmptyState onPick={(t) => setTask(t)} />}
+              {messages.length === 0 && <EmptyState onPick={(t) => setTask(t)} health={health} />}
               <div className="space-y-3">
                 {messages
                   .filter((m) => showReasoning || m.kind !== 'reasoning')
@@ -481,7 +564,7 @@ export default function Home() {
                 onClick={() => setDeepThinking((v) => !v)}
                 className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
                   deepThinking
-                    ? 'border-amber-300 bg-amber-50 text-amber-700'
+                    ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
                     : 'border-muted text-muted-foreground'
                 }`}
                 title="关闭后请求带 enable_thinking=false，响应约快 2×；复杂任务准确率可能下降"
@@ -493,7 +576,7 @@ export default function Home() {
                 onClick={() => setShowReasoning((v) => !v)}
                 className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
                   showReasoning
-                    ? 'border-violet-300 bg-violet-50 text-violet-700'
+                    ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-300'
                     : 'border-muted text-muted-foreground'
                 }`}
                 title="是否展示模型的思考过程"
@@ -568,7 +651,28 @@ export default function Home() {
   )
 }
 
-function EmptyState({ onPick }: { onPick: (t: string) => void }) {
+/** 会话状态点：运行中=琥珀脉冲，完成=绿，出错=红 */
+function SessionStatusDot({ status }: { status: string }) {
+  if (status === 'running') {
+    return <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-500" title="进行中" />
+  }
+  if (status === 'error') {
+    return <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" title="出错" />
+  }
+  return <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="已完成" />
+}
+
+function relTime(iso: string): string {
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return ''
+  const diff = Date.now() - t
+  if (diff < 60_000) return '刚刚'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`
+  return `${Math.floor(diff / 86_400_000)} 天前`
+}
+
+function EmptyState({ onPick, health }: { onPick: (t: string) => void; health: HealthInfo | null }) {
   return (
     <div className="flex flex-col items-center gap-4 py-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600/10">
@@ -580,13 +684,24 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
           DevMate 会先规划，再通过工具调用在沙箱中读代码、改代码、跑测试、提交 Git，
           全程流式可视化。
         </p>
+        {health?.llm.configured && (
+          <p className="mt-1.5 text-[10px] text-muted-foreground/70">
+            当前模型：{health.llm.model}
+            <span className="mx-1">·</span>provider：{health.llm.provider}
+          </p>
+        )}
+      </div>
+      <div className="flex flex-wrap justify-center gap-1.5 text-[10px] text-muted-foreground/80">
+        <span className="rounded-full border px-2 py-0.5">① 结构化规划</span>
+        <span className="rounded-full border px-2 py-0.5">② 工具调用（文件/终端/Git/测试）</span>
+        <span className="rounded-full border px-2 py-0.5">③ 自查 + 提交</span>
       </div>
       <div className="flex flex-wrap justify-center gap-2">
         {QUICK_TASKS.map((t) => (
           <button
             key={t}
             onClick={() => onPick(t)}
-            className="rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-emerald-300 hover:text-emerald-700"
+            className="rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
           >
             {t}
           </button>
@@ -600,9 +715,9 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
 function TodoPanel({ todos }: { todos: TodoItemUI[] }) {
   const done = todos.filter((t) => t.status === 'completed').length
   return (
-    <Card className="mb-3 border-sky-200 bg-sky-50/50 shadow-none">
+    <Card className="mb-3 border-sky-200 bg-sky-50/50 shadow-none dark:border-sky-800 dark:bg-sky-950/30">
       <CardHeader className="flex flex-row items-center gap-2 py-2">
-        <ListChecks className="h-4 w-4 text-sky-600" />
+        <ListChecks className="h-4 w-4 text-sky-600 dark:text-sky-400" />
         <CardTitle className="text-xs">任务清单</CardTitle>
         <span className="ml-auto text-[10px] text-muted-foreground">
           {done}/{todos.length}
@@ -620,7 +735,7 @@ function TodoPanel({ todos }: { todos: TodoItemUI[] }) {
                   t.status === 'completed'
                     ? 'text-muted-foreground line-through'
                     : t.status === 'in_progress'
-                      ? 'font-medium text-sky-700'
+                      ? 'font-medium text-sky-700 dark:text-sky-300'
                       : 'text-muted-foreground'
                 }
               >
@@ -658,8 +773,9 @@ function MessageRow({
         <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted">
           <Bot className="h-3.5 w-3.5 text-emerald-600" />
         </div>
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed">
-          {message.text}
+        {/* 助手回复按 Markdown 渲染（标题/列表/表格/代码高亮），而不是裸文本 */}
+        <div className="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed">
+          <MarkdownView text={message.text ?? ''} />
         </div>
       </div>
     )
@@ -686,13 +802,13 @@ function MessageRow({
     const a = message.approval
     const tone =
       a.risk === 'destructive'
-        ? 'border-red-300 bg-red-50/60'
-        : 'border-amber-300 bg-amber-50/60'
+        ? 'border-red-300 bg-red-50/60 dark:border-red-800 dark:bg-red-950/40'
+        : 'border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/40'
     return (
       <Card className={`shadow-none ${tone}`}>
         <CardHeader className="flex flex-row items-center gap-2 py-2">
           <ShieldAlert
-            className={`h-4 w-4 ${a.risk === 'destructive' ? 'text-red-600' : 'text-amber-600'}`}
+            className={`h-4 w-4 ${a.risk === 'destructive' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}
           />
           <CardTitle className="text-xs">需要你确认（{a.risk}）</CardTitle>
         </CardHeader>
@@ -722,7 +838,7 @@ function MessageRow({
                   拒绝{rememberChoice ? '（并记住）' : ''}
                 </Button>
                 <span className="self-center text-[10px] text-muted-foreground">
-                  超时未处理将按**拒绝**处理
+                  超时未处理将按<b>拒绝</b>处理
                 </span>
               </div>
               <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -747,9 +863,9 @@ function MessageRow({
   }
   if (message.kind === 'permission_denied') {
     return (
-      <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50/50 px-3 py-2">
-        <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />
-        <p className="text-[11px] text-red-700">权限拦截 —— {message.text}</p>
+      <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50/50 px-3 py-2 dark:border-red-800 dark:bg-red-950/40">
+        <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" />
+        <p className="text-[11px] text-red-700 dark:text-red-300">权限拦截 —— {message.text}</p>
       </div>
     )
   }
@@ -779,13 +895,13 @@ function MessageRow({
   }
   if (message.kind === 'plan') {
     return (
-      <Card className="border-emerald-200 bg-emerald-50/50 shadow-none">
+      <Card className="border-emerald-200 bg-emerald-50/50 shadow-none dark:border-emerald-800 dark:bg-emerald-950/30">
         <CardHeader className="flex flex-row items-center gap-2 py-2">
-          <ListChecks className="h-4 w-4 text-emerald-600" />
+          <ListChecks className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           <CardTitle className="text-xs">任务规划</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <ol className="list-inside list-decimal space-y-0.5 marker:text-emerald-600 text-xs text-muted-foreground">
+          <ol className="list-inside list-decimal space-y-0.5 marker:text-emerald-600 text-xs text-muted-foreground dark:marker:text-emerald-400">
             {(message.steps ?? []).map((s, i) => (
               <li key={i}>{s}</li>
             ))}
@@ -796,13 +912,15 @@ function MessageRow({
   }
   if (message.kind === 'context') {
     return (
-      <p className="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">⤴ {message.text}</p>
+      <p className="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+        ⤴ {message.text}
+      </p>
     )
   }
   if (message.kind === 'error') {
     return (
-      <p className="flex items-start gap-1.5 rounded bg-red-50 px-2 py-1.5 text-xs text-red-600">
-        <User className="mt-0.5 h-3 w-3 shrink-0" /> {message.text}
+      <p className="flex items-start gap-1.5 rounded bg-red-50 px-2 py-1.5 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">
+        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {message.text}
       </p>
     )
   }

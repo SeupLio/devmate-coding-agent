@@ -28,7 +28,7 @@ export type AgentEvent =
   | { type: 'reasoning'; text: string }
   | { type: 'token'; text: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
-  | { type: 'tool_result'; id: string; name: string; result: string; ok: boolean }
+  | { type: 'tool_result'; id: string; name: string; result: string; ok: boolean; durationMs?: number }
   | { type: 'todos'; todos: TodoItem[] }
   | {
       type: 'context'
@@ -260,7 +260,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     const runTool = async (
       name: string,
       args: Record<string, unknown>,
-    ): Promise<{ result: string; ok: boolean }> => {
+    ): Promise<{ result: string; ok: boolean; durationMs?: number }> => {
       // 合并「启动时的规则」+「本次会话记住的规则」；会话规则更具体，放后面优先
       const merged: PermissionContext = {
         ...permCtx,
@@ -319,6 +319,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       }
 
       const span = tracer.startSpan(name, 'tool', { args: summarizeArgs(args) })
+      const toolT0 = Date.now()
       try {
         const result = isMcpToolName(name)
           ? await callMcpTool(name, args)
@@ -329,11 +330,11 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
           bad ? { resultLen: result.length, error: result.split('\n')[0].slice(0, 200) } : { resultLen: result.length },
           bad ? 'error' : 'ok',
         )
-        return { result, ok: !bad }
+        return { result, ok: !bad, durationMs: Date.now() - toolT0 }
       } catch (e) {
         const msg = `工具执行异常：${e instanceof Error ? e.message : String(e)}`
         span.end({ error: msg }, 'error')
-        return { result: msg, ok: false }
+        return { result: msg, ok: false, durationMs: Date.now() - toolT0 }
       }
     }
 
@@ -484,7 +485,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
         // ===== 执行：连续的只读调用**并发**跑，其余串行 =====
         // 为什么要分批而不是全并发：写操作（edit_file/write_file/git_operation）
         // 之间可能有依赖，并发会互相踩。只对「无副作用」的工具并发才安全。
-        const outcomes = new Array<{ result: string; ok: boolean }>(calls.length)
+        const outcomes = new Array<{ result: string; ok: boolean; durationMs?: number }>(calls.length)
         let idx = 0
         while (idx < calls.length) {
           if (isConcurrencySafeTool(calls[idx].tc.function.name, readOnlyMcp)) {
@@ -504,9 +505,9 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
         // ===== 按**原始顺序**回填 =====
         // OpenAI 协议要求 tool 消息与 tool_calls 顺序一一对应，并发也不能乱序
         calls.forEach(({ tc }, k) => {
-          const { result, ok } = outcomes[k]
+          const { result, ok, durationMs } = outcomes[k]
           messages.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: result })
-          queue.push({ type: 'tool_result', id: tc.id, name: tc.function.name, result, ok })
+          queue.push({ type: 'tool_result', id: tc.id, name: tc.function.name, result, ok, durationMs })
         })
       }
 
